@@ -1,0 +1,27 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject list>"
+else
+IMAGES="dwi_ants_eddy_reg.nii.gz
+dwi_ants_raw_reg.nii.gz
+dwi_linear_eddy_reg.nii.gz
+dwi_linear_raw_reg.nii.gz"
+	for CURIMG in $IMAGES
+	do
+		for i in `find $DWIREGTOSTRUCT -name "$CURIMG" | sort`
+		do
+			echo $i
+			echo "fslmaths $i $i -odt short" >> $T
+		done
+	done
+
+	if [ -f "$T" ]
+	then
+		parallel -j4 < $T
+		rm -f $T
+	fi
+fi

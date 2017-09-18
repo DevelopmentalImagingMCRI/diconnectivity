@@ -1,0 +1,581 @@
+#!/usr/bin/python
+
+import os
+import getopt
+import sys
+
+import subprocess
+
+import DIConnEnv
+import textwrap
+
+import FreesurferCortexLabelsModule
+
+def getConnSchemes():
+	CortexLabels = FreesurferCortexLabelsModule.freesurferCortexLabels()
+	return CortexLabels.keys()
+
+def longUsage():
+	ConnEnv = DIConnEnv.getDIConnEnv()
+	
+	usageString = [ \
+	"STRUCTURAL IMAGE PROCESSING DIRECTIVES"
+	"", \
+	"\t--struct-reorient: reorient T1 to canonical orientation", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['RAWT1'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT: " + os.path.join(ConnEnv['T1REORIENT'], '<subject id>.nii.gz'), \
+	"\t\tChanges the slice orientation of the input to axial (canonical orientation) with fslswapdim. If the input is already in canonical orientation then the output will be a symbolic link to the input", \
+	"", \
+	"\t--struct-neckcrop: crops neck slices off T1, depends --struct-reorient", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['T1REORIENT'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT: " + os.path.join(ConnEnv['T1NECKCROPPED'], '<subject id>.nii.gz'), \
+	"\t\tPerforms a crude neck crop. Firstly, finds the most superior slice and crops to that and 180mm below that slice. Then, registers to the MNI152 skull-stripped template. This template is transferred to native space and the bottom slice of that is used to perform a final crop", \
+	"", \
+	"\t--struct-biascorrect: performs bias correction with N4, depends --struct-neckcrop", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['T1NECKCROPPED'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT: " + os.path.join(ConnEnv['T1BIASCORRECTED'], '<subject id>.nii.gz'), \
+	"\t\tPerforms bias correction (intensity inhomogeneity correction) with the tool N4", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--struct-biascorrect-N4-options=<>: extra options to pass to N4, can be used to override defaults, defaults are: " + " ".join(structN4DefaultOptions()), \
+	"", \
+	"\t--struct-skullstrip: performs skull stripping, depends --struct-biascorrect", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['T1BIASCORRECTED'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT:", \
+	"\t\t\t" + os.path.join(ConnEnv['T1SKULLSTRIPPED'], '<subject id>.nii.gz'), \
+	"\t\t\t" + os.path.join(ConnEnv['T1SKULLSTRIPPED'], '<subject id>_mask.nii.gz'), \
+	"\t\tPerforms a skull strip (brain extraction) on the T1 structural image. There are numerous choices of method supported (see below)", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--struct-skullstrip-use-BET: use FSL's BET (default)", \
+	"\t\t\t--struct-skullstrip-use-freesurfer: use skull strip output from freesurfer (depends --struct-freesurfer)", \
+	"\t\t\t--struct-skullstrip-use-WS: use Richard's watershed method", \
+	"", \
+	"\t--struct-freesurfer: run Freesurfer, depends --struct-biascorrect", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['T1BIASCORRECTED'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT: " + os.path.join(ConnEnv['FREESURFER'], '<subject id>'), \
+	"\t\tRuns the full freesurfer pipeline on the bias corrected T1 structural image. The output directories are in " + os.path.join(ConnEnv['FREESURFER'], '<subject id>') + ". It is recommended that users perform manual edits on the freesurfer outputs, particularly the white matter surface. The user should perform these edits and checks manually. If the user wishes to use their own scripts for actually running the recon-all command, then use the --struct-freesurfer-norun to not run recon-all", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--struct-freesurfer-norun: don't actually run recon-all, just create the directories and put the T1 image in the correct location", \
+	"", \
+	"\t--struct-extractfreesurferbaselabels: from the Freesurfer outputs, extract white matter masks, and cortical parcellations aparc (Desikan) and aparc.a2009s (Destrieux), maybe add DKT to that list, depends --struct-freesurfer, --dwi-regtostruct", \
+	"\t\tINPUT:", \
+	"\t\t\t" + os.path.join(ConnEnv['T1BIASCORRECTED'], '<subject id>.nii.gz'), \
+	"\t\t\t" + os.path.join(ConnEnv['DWIBZERO'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT:", \
+	"\t\t\t" + os.path.join(ConnEnv['FREESURFERBASELABELS'], '<subject id>'), \
+	"\t\tTransfers segmentation output images from Freesurfer into native, linear registration and diffusion space. Output files are in the format " + os.path.join(ConnEnv['FREESURFERBASELABELS'], '<parc>_<outspace>.nii.gz') + ". The list of parcellations is as follows:", \
+	"\t\t\taparc+aseg (Desikan cortical labels plus Fischl whole brain labels)", \
+	"\t\t\twmparc (\"WMPARC\" labels, Desikan labels projected into superficial white matter plus Fischl whole brain labels)", \
+	"\t\t\taparc.a2009s+aseg (Destrieux cortical labels plus Fischl whole brain labels)", \
+	"\t\t\trawavg (Input image)", \
+	"\t\tNative space images are stored without a suffix e.g. aparc+aseg.nii.gz. Images in T1 resolution but linearly registered to DWI space have suffix _linear_reg. Images registered to diffusion space have suffix _dwi (this image is still in T1 resolution but its voxel to world matrix has been modified).", \
+	"\t\t--struct-freesurfer-long=<long subject directory>: if a subject has a longitudinal output, specify it in this option to use it instead of the cross"
+	"", \
+	"DIFFUSION IMAGE PROCESSING DIRECTIVES"
+	"", \
+	"\t--dwi-reorient: reorient DWI image to canonical orientation", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['RAWDWI'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT: " + os.path.join(ConnEnv['DWIREORIENT'], '<subject id>.nii.gz'), \
+	"\t\tChanges the slice orientation of the input to axial (canonical orientation) with fslswapdim. If the input is already in canonical orientation then the output will be a symbolic link to the input", \
+	"", \
+	"\t--dwi-savebzero: extracts b-zero image (first image in DWI image), depends --dwi-reorient", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['DWIREORIENT'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT: " + os.path.join(ConnEnv['DWIBZERO'], '<subject id>.nii.gz'), \
+	"", \
+	"\t--dwi-skullstrip: performs skull strip in bzero image with BET, depends --dwi-savebzero", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['DWIBZERO'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT:", \
+	"\t\t\t" + os.path.join(ConnEnv['DWISKULLSTRIPPED'], '<subject id>.nii.gz'), \
+	"\t\t\t" + os.path.join(ConnEnv['DWISKULLSTRIPPED'], '<subject id>_mask.nii.gz'), \
+	"\t\tBET generally works quite well for the b=0 image", \
+	"", \
+	"\t--dwi-blipudreorient: performs blip up and blip down image reorientation to canonical (NOT IMPLEMENTED)", \
+	"", \
+	"\t--dwi-distortioncorrect: performs motion/distortion correction, depends --dwi-reorient", \
+	"\t\tINPUT: " + os.path.join(ConnEnv['DWIREORIENT'], '<subject id>.nii.gz'), \
+	"\t\tOUTPUT:", \
+	"\t\t\t" + os.path.join(ConnEnv['DWIEDDYCORRECTED'], '<subject id>.nii.gz') + " (if --dwi-use-eddycorrect is used)", \
+	"\t\t\t" + os.path.join(ConnEnv['DWIBLIPUDCORRECTED'], '<subject id>.nii.gz') + " (if --dwi-use-blipud is used)", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--dwi-use-eddycorrect: use motion correction, modified eddy_correct for b=3000, (default)", \
+	"\t\t\t--dwi-use-blipud: use blip-up, blip-down (NOT IMPLEMENTED)", \
+	"", \
+	"\t--dwi-mrtrixpreprocess: performs tensor estimation and CSD with mrtrix in DWI and T1 space, depends --dwi-distortioncorrect", \
+	"\t\tINPUT: ", \
+	"\t\t\t" + os.path.join(ConnEnv['DWIEDDYCORRECTED'], '<subject id>.nii.gz') + " (if --dwi-use-eddycorrect is used)", \
+	"\t\t\t" + os.path.join(ConnEnv['DWIBLIPUDCORRECTED'], '<subject id>.nii.gz') + " (if --dwi-use-blipud is used)", \
+	"\t\tOUTPUT:", \
+	"\t\t\tOUTPUT OPTIONS"
+	"\t\t\t--mrtrix-dwispace-nobrotation: perform CSD estimation in DWI space without B-vector rotation from movement correction (enabled by default)", \
+	"\t\t\t--mrtrix-dwispace-brotation: perform CSD estimation in DWI space with B-vector rotation from movement correction", \
+	"\t\t\t--mrtrix-structspace-nobrotation: perform CSD estimation in structural space without B-vector rotation from movement correction", \
+	"\t\t\t--mrtrix-structspace-brotation: perform CSD estimation in structural space with B-vector rotation from movement correction", \
+	"\t\tExecutes a standard mrtrix preprocessing pipeline that has tensor calculation and crossing fibre estimation with CSD. Performs this in DWI and T1 space with and without b-vector rotation. For mrtrix 2, the following output directories are created:", \
+	"\t\t\tmrtrix2DWISpaceNoBReorient: DWI image is in native space without B-vector reorientation from motion correction", \
+	"\t\t\tmrtrix2DWISpaceBReorient: DWI image is in native space with B-vector reorientation from motion correction", \
+	"\t\t\tmrtrix2StructSpaceNoBReorient: DWI image is in structural space without B-vector reoriention from motion correction and affine registration", \
+	"\t\t\tmrtrix2StructSpaceBReorient: DWI image is in structural space with B-vector reoriention from motion correction and affine registration", \
+	"\t\tNOTE: if mrtrix 3 is used (--mrtrix-mrtrix3) the above directories will have a mrtrix3 prefix", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--mrtrix-mrtrix2: use mrtrix 0.2.12 (default)", \
+	"\t\t\t--mrtrix-mrtrix3: use mrtrix3 git", \
+	"\t\t\t--mrtrix-no-t1-space: do not perform the T1 space estimations", \
+	"\t\t\t--dwi-use-eddycorrect: use eddy corrected DW images (default)", \
+	"\t\t\t--dwi-use-blipud: use blip up down corrected DW images (NOT IMPLEMENTED)", \
+	"\t\t\t--mrtrix-csd-lmax=<>: the maximum harmonic order to use for CSD, automatically determined if not given", \
+	"", \
+	"\t--dwi-regtostruct: register the bzero image to the structural image, depends --struct-biascorrect, --dwi-skullstrip", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--dwi-regtostruct-ANTS: use FLIRT + ANTS, (default)", \
+	"\t\t\t--dwi-regtostruct-elastix: use FLIRT + elastix for image-based registration, (NOT IMPLEMENTED)", \
+	"\t\t\t--dwi-regtostruct-blipud: use FLIRT for image-based registration, (NOT IMPLEMENTED)", \
+	"", \
+	"CONNECTOME PROCESSING DIRECTIVES"
+	"", \
+	"\t--conn-generateseeds: generate seed and mask images for the parcellation schemes defined in lib/parc_schemes, depends --dwi-regtostruct, --dwi-mrtrixpreprocess", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--conn-schemes: comma-separated list of schemes to generate, current supported schemes: " + ", ".join(getConnSchemes()) + ". Generates all these if omitted.", \
+
+	]
+	
+	usageString = [textwrap.fill(x, 120) for x in usageString]
+	print "\n".join(usageString)
+
+def usage():
+	usageString = [ \
+	"USAGE: ConnReconAll <processing directives> [processing options] <subject id>", \
+	"", \
+	"Performs structural image, diffusion image and connectome processing", \
+	"", \
+	"For each <subject id>, input data are to be placed as follows:", \
+	"\tStructural data", \
+	"\t\tRawT1/<subject id>.nii.gz: Whole-brain T1-weighted image", \
+	"\t\tRawT2/<subject id>.nii.gz: Whole-brain T2-weighted image (optional for freesurfer)", \
+	"\tDiffusion data", \
+	"\t\tRawDWI/<subject id>.nii.gz: Whole-brain diffusion weighted images", \
+	"\t\tRawDWI/<subject id>.grad: Mrtrix formatted gradient table for RawDWI/<subject id>.nii.gz", \
+	"\t\tRawBlipUD/<subject id>.nii.gz: Whole-brain blip-up, blip-down image", \
+	"", \
+	"STRUCTURAL IMAGE PROCESSING DIRECTIVES"
+	"", \
+	"\t--struct-reorient: reorient T1 to canonical orientation", \
+	"", \
+	"\t--struct-neckcrop: crops neck slices off T1, depends --struct-reorient", \
+	"", \
+	"\t--struct-biascorrect: performs bias correction with N4, depends --struct-neckcrop", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--struct-biascorrect-N4-options=<>: extra options to pass to N4, can be used to override defaults, defaults are: " + " ".join(structN4DefaultOptions()), \
+	"", \
+	"\t--struct-skullstrip: performs skull stripping, depends --struct-biascorrect", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--struct-skullstrip-use-BET: use FSL's BET (default)", \
+	"\t\t\t--struct-skullstrip-use-freesurfer: use skull strip output from freesurfer (depends --struct-freesurfer)", \
+	"\t\t\t--struct-skullstrip-use-WS: use Richard's watershed method", \
+	"", \
+	"\t--struct-freesurfer: run Freesurfer, depends --struct-biascorrect", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--struct-freesurfer-norun: don't actually run recon-all, just create the directories and put the T1 image in the correct location", \
+	"", \
+	"\t--struct-extractfreesurferbaselabels: from the Freesurfer outputs, extract white matter masks, and cortical parcellations aparc (Desikan) and aparc.a2009s (Destrieux), maybe add DKT to that list, depends --struct-freesurfer, --dwi-regtostruct", \
+	"\tOPTIONS" \
+	"\t\t--struct-freesurfer-long=<long subject directory>: if a subject has a longitudinal output, specify it in this option to use it instead of the cross" \
+	"", \
+	"DIFFUSION IMAGE PROCESSING DIRECTIVES"
+	"", \
+	"\t--dwi-reorient: reorient DWI image to canonical orientation", \
+	"", \
+	"\t--dwi-savebzero: extracts b-zero image (first image in DWI image), depends --dwi-reorient", \
+	"", \
+	"\t--dwi-skullstrip: performs skull strip in bzero image with BET, depends --dwi-savebzero", \
+	"", \
+	"\t--dwi-blipudreorient: performs blip up and blip down image reorientation to canonical (NOT IMPLEMENTED)", \
+	"", \
+	"\t--dwi-distortioncorrect: performs motion/distortion correction, depends --dwi-reorient", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--dwi-use-eddycorrect: use motion correction, modified eddy_correct for b=3000, (default)", \
+	"\t\t\t--dwi-use-blipud: use blip-up, blip-down (NOT IMPLEMENTED)", \
+	"", \
+	"\t--dwi-mrtrixpreprocess: performs tensor estimation and CSD with mrtrix in DWI and T1 space, depends --dwi-distortioncorrect", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--mrtrix-mrtrix2: use mrtrix 0.2.12 (default)", \
+	"\t\t\t--mrtrix-mrtrix3: use mrtrix3 git", \
+	"\t\t\t--mrtrix-csd-lmax=<>: the maximum harmonic order to use for CSD, automatically determined if not given", \
+	"\t\tOUTPUT OPTIONS:", \
+	"\t\t\t--mrtrix-dwispace-nobrotation: perform CSD estimation in DWI space without B-vector rotation from movement correction (enabled by default)", \
+	"\t\t\t--mrtrix-dwispace-brotation: perform CSD estimation in DWI space with B-vector rotation from movement correction", \
+	"\t\t\t--mrtrix-structspace-nobrotation: perform CSD estimation in structural space without B-vector rotation from movement correction", \
+	"\t\t\t--mrtrix-structspace-brotation: perform CSD estimation in structural space with B-vector rotation from movement correction", \
+	"", \
+	"\t--dwi-regtostruct: register the bzero image to the structural image, depends --struct-biascorrect, --dwi-skullstrip", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--dwi-regtostruct-ANTS: use FLIRT + ANTS, (default)", \
+	"\t\t\t--dwi-regtostruct-elastix: use FLIRT + elastix for image-based registration, (NOT IMPLEMENTED)", \
+	"\t\t\t--dwi-regtostruct-blipud: use FLIRT for image-based registration, (NOT IMPLEMENTED)", \
+	"", \
+	"CONNECTOME PROCESSING DIRECTIVES"
+	"", \
+	"\t--conn-generateseeds: generate seed and mask images for the parcellation schemes defined in lib/parc_schemes, depends --dwi-regtostruct, --dwi-mrtrixpreprocess", \
+	"\t\tOPTIONS:", \
+	"\t\t\t--conn-schemes: comma-separated list of specific schemes to generate, current supported schemes: " + ", ".join(getConnSchemes()) + ". Generates all these if omitted.", \
+	]
+
+	print "\n".join(usageString)
+
+def runCommand(CMD):
+	print "Running command:"
+	print "\t" + " ".join(CMD)
+	try:
+		subprocess.check_call(CMD)
+	except subprocess.CalledProcessError:
+		print "Command Failed"
+		quit()
+
+def structN4DefaultOptions():
+	return ['-v', '-c', '[100x100x100x100,0]', '-b', '[200]', '-s', '3']
+
+def main():
+	
+	processingSteps = [ \
+	"struct-reorient", \
+	"struct-neckcrop", \
+	"struct-skullstrip", \
+	"struct-biascorrect", \
+	"struct-freesurfer", \
+	"struct-extractfreesurferbaselabels", \
+	"dwi-reorient", \
+	"dwi-savebzero", \
+	"dwi-skullstrip", \
+	"dwi-blipudreorient", \
+	"dwi-distortioncorrect", \
+	"dwi-mrtrixpreprocess", \
+	"dwi-regtostruct", \
+	"conn-generateseeds", \
+	]
+
+	processingStrings = list()
+
+	for curProcessingStep in processingSteps:
+		processingStrings.extend([curProcessingStep, "no-" + curProcessingStep])
+	
+	doProcessingSteps = dict.fromkeys(processingSteps, False)
+	
+	longOptStrings = processingStrings[:]
+	
+	# now put in options for specific steps
+#	struct-reorient no options
+#	struct-neckcrop
+	#skull strip method
+#	struct-biascorrect
+	longOptStrings.extend(["struct-biascorrect-N4-options="])
+
+#	struct-skullstrip
+	longOptStrings.extend(["struct-skullstrip-use-BET", "struct-skullstrip-use-freesurfer", "struct-skullstrip-use-WS"])
+
+	# skull strip method maybe
+#	struct-freesurfer
+	longOptStrings.extend(["struct-freesurfer-options=", "struct-freesurfer-norun", "struct-freesurfer-use-nobiascorrected", "struct-freesurfer-use-biascorrected"])
+
+	# freesurfer
+#	struct-regfreesurfertodwi
+
+#	dwi-reorient # no options
+#	dwi-skullstrip # no options, BET is fine
+#	dwi-distortioncorrect: Options to choose whether blip-up blip-down (topup, eddy) or eddy_correct are used for the distortion coorection
+	longOptStrings.extend(["dwi-use-eddycorrect", "dwi-use-blipud"])
+#	dwi-mrtrixpreprocess
+	longOptStrings.extend(["mrtrix-mrtrix2", "mrtrix-mrtrix3", "mrtrix-csd-lmax=", "mrtrix-dwispace-nobrotation", "mrtrix-dwispace-brotation", "mrtrix-structspace-brotation", "mrtrix-dwispace-nobrotation", "mrtrix-structspace-nobrotation"])
+
+	# struct-extractfreesurferbaselabels
+	longOptStrings.extend(["struct-freesurfer-long="])
+
+#	conn-generate-seeds
+	longOptStrings.extend(["conn-schemes="])
+	
+#	conn-generate-connectome	
+	longOptStrings.extend(["conn-curvature="])
+
+	#longOptStrings.extend(CCSegSubjectSelection.getOptions())	
+	try:
+		opts, args = getopt.getopt(sys.argv[1:], "h", longOptStrings)
+	except Exception:
+		print("Invalid command-line option specified")
+		usage()
+		quit()
+	
+	subjectID = None
+	structBiasCorrectN4Options = None
+	
+	structSkullStripMethod = '--bet'
+	
+	freesurferRun = True
+	structFreesurferUseBiasCorrected = True
+	extraFreesurferOptions = None
+	
+	DWIDistortionCorrectMethod = '--eddycorrect'
+
+	MrtrixVersionToUse = 2
+	MrtrixCSDLMAX = None
+	MrtrixDWISpaceNoBRotation = True
+	MrtrixDWISpaceBRotation = False
+	MrtrixT1SpaceNoBRotation = False
+	MrtrixT1SpaceBRotation = False
+	
+	freesurferLongSubject = None
+	
+	connSchemes = None
+
+	for o, a in opts:
+		if o[2:] in processingStrings:
+			if o.startswith('--no-'):
+				doProcessingSteps[o[5:]] = False
+			else:
+				doProcessingSteps[o[2:]] = True
+
+		# --struct-biascorrect
+		if o == '--struct-biascorrect-N4-options':
+			structBiasCorrectN4Options = a.split()
+
+		# --struct-skullstrip
+		if o == '--struct-skullstrip-use-BET':
+			structSkullStripMethod = '--bet'
+		if o == '--struct-skullstrip-use-freesurfer':
+			structSkullStripMethod = '--freesurfer'
+		if o == '--struct-skullstrip-use-WS':
+			structSkullStripMethod = '--ws'
+		
+		# --struct-freesurfer
+		if o == '--struct-freesurfer-options':
+			extraFreesurferOptions = a.split()
+		if o == '--struct-freesurfer-norun':
+			freesurferRun = False
+		if o == '--struct-freesurfer-use-biascorrected':
+			structFreesurferUseBiasCorrected = True
+		if o == '--struct-freesurfer-use-nobiascorrected':
+			structFreesurferUseBiasCorrected = False
+		if o == '--dwi-use-eddycorrect':
+			DWIDistortionCorrectMethod = '--eddycorrect'
+		if o == '--dwi-use-blipud':
+			DWIDistortionCorrectMethod = '--blipud'
+		
+		if o == '--mrtrix-mrtrix2':
+			MrtrixVersionToUse = 2
+		if o == '--mrtrix-mrtrix3':
+			MrtrixVersionToUse = 3
+		
+		if o == '--mrtrix-csd-lmax':
+			MrtrixCSDLMAX = a
+	
+		
+		if o == '--mrtrix-dwispace-nobrotation':
+			MrtrixDWISpaceNoBRotation = True
+		if o == '--mrtrix-dwispace-brotation':
+			MrtrixDWISpaceBRotation = True
+		if o == '--mrtrix-structspace-nobrotation':
+			MrtrixStructSpaceNoBRotation = True
+		if o == '--mrtrix-stuctspace-brotation':
+			MrtrixStructSpaceBRotation = True
+		
+		if o == '--no-mrtrix-dwispace-nobrotation':
+			MrtrixDWISpaceNoBRotation = False
+		if o == '--no-mrtrix-dwispace-brotation':
+			MrtrixDWISpaceBRotation = False
+		if o == '--no-mrtrix-structspace-nobrotation':
+			MrtrixStructSpaceNoBRotation = False
+		if o == '--no-mrtrix-stuctspace-brotation':
+			MrtrixStructSpaceBRotation = False
+		
+
+		if o == '--struct-freesurfer-long':
+			freesurferLongSubject = a
+
+		if o == '--conn-schemes':
+			connSchemes = a
+
+		if o == '-h':
+			longUsage()
+			quit()
+	#for o, a in opts:
+	
+	if len(args) != 1:
+		print("No subject ID was specified")
+		usage()
+		quit()
+	
+	subjectID = args[0]
+	
+	if subjectID == None:
+		print("No subject ID was specified")
+		quit()
+	
+	# do structural elements in order
+
+	print "DIConn recon-all"
+	print "Subject: " + subjectID
+
+	print "Processing steps selected:"
+
+	for k, v in doProcessingSteps.iteritems():
+		if v == True:
+			print "\t" + k
+
+	if doProcessingSteps['struct-reorient']:
+		cmd = ["StructReorient", subjectID]
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['struct-neckcrop']:
+		cmd = ["StructNeckCrop", subjectID]
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['struct-biascorrect']:
+		N4Options = structN4DefaultOptions()
+		if structBiasCorrectN4Options != None:
+			N4Options.extend(structBiasCorrectN4Options)
+
+		cmd = ["StructBiasCorrect", subjectID]
+		cmd.extend(N4Options)
+		#print cmd
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['struct-freesurfer']:
+
+		cmd = ["StructFreesurfer", subjectID]
+		if freesurferRun == True:
+			cmd.append("--run")
+		else:
+			cmd.append("--no-run")
+
+		if structFreesurferUseBiasCorrected == True:
+			cmd.append("--biascorrected")
+		else:
+			cmd.append("--raw")
+
+		if extraFreesurferOptions != None:
+			cmd.extend(extraFreesurferOptions)
+
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['struct-skullstrip']:
+		cmd = ["StructSkullStrip", subjectID, structSkullStripMethod]
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['struct-extractfreesurferbaselabels']:
+		cmd = ["StructExtractFreesurferBaseLabels", subjectID, str(MrtrixVersionToUse)]
+		if freesurferLongSubject != None:
+			cmd.extend([freesurferLongSubject])
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['dwi-reorient']:
+		cmd = ["DWIReorient", subjectID]
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['dwi-savebzero']:
+		cmd = ["DWISaveBZero", subjectID]
+		runCommand(cmd)
+		pass
+
+	if doProcessingSteps['dwi-skullstrip']:
+		cmd = ["DWISkullStrip", subjectID]
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['dwi-distortioncorrect']:
+		cmd = ["DWIDistortionCorrect", subjectID, DWIDistortionCorrectMethod]
+		runCommand(cmd)
+		pass
+	
+	if doProcessingSteps['dwi-regtostruct']:
+		cmd = ["DWIRegToStruct", subjectID, DWIDistortionCorrectMethod]
+		runCommand(cmd)
+		pass
+
+	if doProcessingSteps['dwi-mrtrixpreprocess']:
+		
+		#--mrtrix-no-struct-space: do not create structural space outputs", \
+	#"\t\t\t--mrtrix-no-struct-linear: do not create structural space linear only outputs", \
+	#"\t\t\t--mrtrix-no-nobrotation: do not create outputs that do not have rotated b-vectors", \
+	#"", \
+
+		MrtrixCommand = 'DWIMrtrixPreprocessMrtrix' + str(MrtrixVersionToUse)
+
+		if MrtrixDWISpaceNoBRotation == True:
+			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'DWISpaceNoBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+			if MrtrixCSDLMAX != None:
+				cmd.append(MrtrixCSDLMAX)
+			runCommand(cmd)
+		
+		if MrtrixDWISpaceBRotation == True:
+			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'DWISpaceBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIEddyCorrected', subjectID + '.grad')]
+			if MrtrixCSDLMAX != None:
+				cmd.append(MrtrixCSDLMAX)
+			runCommand(cmd)
+
+		if MrtrixT1SpaceNoBRotation == True:
+			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'StructSpaceNoBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+			if MrtrixCSDLMAX != None:
+				cmd.append(MrtrixCSDLMAX)
+			runCommand(cmd)
+
+#		if MrtrixNoStructSpace == False and MrtrixNoNoBRotation == False:
+		if MrtrixT1SpaceNoBRotation == True:
+			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'StructSpaceBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.grad')]
+			if MrtrixCSDLMAX != None:
+				cmd.append(MrtrixCSDLMAX)
+			runCommand(cmd)
+#		
+#		#cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'T1SpaceNoEddyBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'linear_reg_no_eddy_reorient.grad')]
+#		#runCommand(cmd)
+#		
+#		if MrtrixNoStructSpace == False and MrtrixNoStructLinear == False and MrtrixNoNoBRotation == False:
+#			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'T1LinearSpaceNoBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_linear_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+#			if MrtrixCSDLMAX != None:
+#				cmd.append(MrtrixCSDLMAX)
+#			runCommand(cmd)
+#
+#		if MrtrixNoStructSpace == False and MrtrixNoStructLinear == False and MrtrixNoNoBRotation == False:
+#			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'T1LinearSpaceBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_linear_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.grad')]
+#			if MrtrixCSDLMAX != None:
+#				cmd.append(MrtrixCSDLMAX)
+#			runCommand(cmd)
+#		#if MrtrixNoNoBRotation == False:
+
+	#	cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'DWISpaceBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_eddy_reorient.grad')]
+		
+#		elif MrtrixVersionToUse == 3:
+#			#cmd = ["DWIMrtrixPreprocessMrtrix3", subjectID, 'mrtrix3T1SpaceNoBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+#			#runCommand(cmd)
+#			cmd = ["DWIMrtrixPreprocessMrtrix3", subjectID, 'mrtrix3T1SpaceBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.grad')]
+#			runCommand(cmd)
+#			#cmd = ["DWIMrtrixPreprocessMrtrix3", subjectID, 'mrtrix3T1SpaceNoEddyBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'linear_reg_no_eddy_reorient.grad')]
+#			#runCommand(cmd)
+#			
+#			#cmd = ["DWIMrtrixPreprocessMrtrix3", subjectID, 'mrtrix3T1LinearSpaceNoBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_linear_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+#			#runCommand(cmd)
+#			#cmd = ["DWIMrtrixPreprocessMrtrix3", subjectID, 'mrtrix3T1LinearSpaceBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_linear_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.grad')]
+#			#runCommand(cmd)
+#			cmd = ["DWIMrtrixPreprocessMrtrix3", subjectID, 'mrtrix3DWISpaceNoBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+#			runCommand(cmd)
+#			cmd = ["DWIMrtrixPreprocessMrtrix3", subjectID, 'mrtrix3DWISpaceBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_eddy_reorient.grad')]
+#			runCommand(cmd)
+#
+#		pass
+#	
+#if doProcessingSteps['struct-regfreesurfertodwi']:
+#		pass
+	
+	if doProcessingSteps['conn-generateseeds']:
+		cmd = ["ConnGenerateSeeds", subjectID]
+		if connSchemes != None:
+			cmd.extend(connSchemes.split(','))
+		runCommand(cmd)
+		pass
+#def main():
+
+
+if __name__ == "__main__":
+	main()

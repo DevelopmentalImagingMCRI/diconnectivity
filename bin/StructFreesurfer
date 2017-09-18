@@ -1,0 +1,53 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" -o -z "$2" -o -z "$3" ]
+then
+	echo "Usage: $0 <subject id> <--run or --norun> <--biascorrected or --raw> [other options]"
+else
+	
+	SUBJECTID=$1
+	RUNNORUN=$2
+	BIASORRAW=$3
+
+	if [ "$BIASORRAW" = "--biascorrected" -a "x`imglob $T1BIASCORRECTED/$SUBJECTID`" = "x" ]
+	then
+		echo "The file $T1BIASCORRECTED/$SUBJECTID does not exist, run --struct-biascorrect"
+		exit 1;
+	fi
+	
+	if [ "$BIASORRAW" = "--raw" -a "x`imglob $T1NECKCROPPED/$SUBJECTID`" = "x" ]
+	then
+		echo "The file $T1NECKCROPPED/$SUBJECTID does not exist, run --struct-neckcrop"
+		exit 1;
+	fi
+	
+	case $BIASORRAW in
+	--raw)
+		INDIR=$T1NECKCROPPED
+		;;
+	--biascorrected)
+		INDIR=$T1BIASCORRECTED
+		;;
+	esac	
+
+	export SUBJECTS_DIR=`pwd`/$FREESURFER
+
+	mkdir -p $FREESURFER
+	cd $SUBJECTS_DIR
+	if [ ! -d "$1" ]
+	then
+		mksubjdirs $1
+	fi
+	cd ..
+
+	mri_convert $INDIR/${SUBJECTID}.nii.gz $FREESURFER/$SUBJECTID/mri/orig/001.mgz
+	rm -f $FREESURFER/$SUBJECTID/mri/orig/001.nii.gz
+
+	if [ "$RUNNORUN" == "--run" ]
+	then
+		shift 3;
+		recon-all -subjid $SUBJECTID -all $@
+	fi
+fi

@@ -1,0 +1,20 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject id>"
+else
+	SUBJECTID=$1
+
+	if [ "x`imglob $DWIREORIENT/$SUBJECTID`" = "x" ]
+	then
+		echo "The reoriented DWI image $DWIREORIENT/$1 does not exist, run --dwi-reorient"
+		exit 1;
+	fi
+	
+	mkdir -p $DWIEDDYCORRECTED
+
+	DWIEddyCorrectMI -m $DWIEDDYCORRECTED/$1.mat $RAWDWIREORIENT/$1.nii.gz $DWIEDDYCORRECTED/$1.nii.gz 0 
+fi

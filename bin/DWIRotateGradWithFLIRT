@@ -1,0 +1,97 @@
+#!/usr/bin/python
+
+import csv 
+
+import os
+import sys 
+
+import nibabel
+
+import numpy
+
+import getopt
+
+import FLIRT
+
+def usage():
+	print "DWIRotateGradWithFLIRT <input grad file> <input flirt file> <output grad file>"
+	print
+	print "Rotates a b-vector in input grad file with the flirt matrix in <input flirt file>, writes to <output grad file>"
+
+def main():
+	opts, args = getopt.getopt(sys.argv[1:], "h", [])
+		
+	if len(args) < 3:
+		usage()
+		quit()
+
+	inputGradFile = args[0]
+	inputFLIRTMatFile = args[1]
+	outputGradFile = args[2]
+
+	if not os.path.isfile(inputGradFile):
+		print "Input grad file not found: " + inputGradFile
+		quit()
+	
+	if not os.path.isfile(inputFLIRTMatFile):
+		print "Input mat file not found: " + inputFLIRTMatFile
+		quit()
+	
+	#print numpy.get_printoptions()
+
+	numpy.set_printoptions(formatter={'all': lambda x: "%.3f" % x})
+
+	inputGradTable = numpy.loadtxt(inputGradFile)
+	inputGradTable = numpy.atleast_2d(inputGradTable)
+	inputBValues = numpy.take(inputGradTable, [3], axis = 1)
+
+	inputGradientDirections = numpy.take(inputGradTable, [0, 1, 2], axis = 1)
+
+	#print inputBValues
+	#print inputGradientDirections
+	FLIRTTransform = numpy.loadtxt(inputFLIRTMatFile)
+	# flip the X axis of the flirt transform
+
+	#R = numpy.eye(4)
+	#R[0, 0] = -1
+	#R[1, 1] = -1
+	#R[2, 2] = -1
+	
+	# I don't need to worry about translations because we only care about the rotations
+	
+
+	#R[0, 3] = 
+
+	(rotmat, skew, scales, transl, angles) = FLIRT.fsl_decomp_aff(numpy.matrix(FLIRTTransform))
+	
+	#rotmatfirst = numpy.matrix(rotmat)
+	#print FLIRTTransform
+
+	#FLIRTTransform = numpy.matrix(R) * numpy.matrix(FLIRTTransform)
+	##FLIRTTransform[0, 1] = -FLIRTTransform[0, 1]
+	#FLIRTTransform[1, 0] = -FLIRTTransform[1, 0]
+	#print FLIRTTransform
+	#(rotmat, skew, scales, transl, angles) = FLIRT.fsl_decomp_aff(numpy.matrix(FLIRTTransform))
+	
+	# flipx
+	rotmat[0, 1] = -rotmat[0, 1]
+	rotmat[1, 0] = -rotmat[1, 0]
+	
+
+	#print numpy.matrix(rotmat).T
+	#print numpy.matrix(rotmatfirst).T
+
+#print InputGrad.shape
+
+	outputGrad = numpy.array(numpy.matrix(inputGradientDirections) * numpy.matrix(rotmat).T)
+	#outputGradFirst = numpy.array(numpy.matrix(inputGradientDirections) * numpy.matrix(rotmatfirst).T)
+	
+# add the b-values back
+	outputGradTable = numpy.concatenate((outputGrad, inputBValues), axis = 1)
+	#outputGradTableFirst = numpy.concatenate((outputGradFirst, inputBValues), axis = 1)
+
+	numpy.savetxt(outputGradFile, outputGradTable, fmt = '%.4f')
+	#numpy.savetxt(outputGradFile + ".first", outputGradTableFirst, fmt = '%.4f')
+
+if __name__ == "__main__":
+	main()

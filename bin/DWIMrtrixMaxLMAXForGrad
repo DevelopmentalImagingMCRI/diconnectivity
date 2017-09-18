@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# prints out the maximum LMAX value possible for a given number of directions
+# takes a gradient table as input
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <grad file>"
+else
+	if [ ! -f "$1" ]
+	then
+		echo "Grad file not found: $1";
+		exit 1;
+	else
+		# count the number of non-zero b-values
+		NUMDWIDIRECTIONS=`awk '{ if ($4 > "0") { SUM += 1 } } END { print SUM }' $1`
+		
+		for LMAX in `seq 20 -2 2`
+		do
+#E=`expr \($LMAX + 1\) \* \($LMAX + 2\)`
+			NUMPARAMS="$(( ( $LMAX + 1 ) * ( $LMAX + 2 ) / 2 ))"
+			
+			if [ "$NUMPARAMS" -le "$NUMDWIDIRECTIONS" ]
+			then
+				echo $LMAX
+				exit;
+			fi
+		done
+		# number of directions required for particular lmax
+
+#½ (n+1)(n+2)
+	fi
+
+fi
+

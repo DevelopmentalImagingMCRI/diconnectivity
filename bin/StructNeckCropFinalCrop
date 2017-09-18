@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+
+import os
+import re
+import subprocess
+import sys
+
+#from nifti import *;
+#import nifti.clib as ncl
+import nibabel
+import numpy
+
+import scipy.ndimage
+
+import DIConnEnv
+
+if len(sys.argv) < 3:
+	print "usage: " + sys.argv[0] + " <subjectid> <maskfile>"
+	quit()
+else:
+	environmentVariables = DIConnEnv.getDIConnEnv()
+
+	if environmentVariables == None:
+		InputDir = 'T1NeckCropped'
+		OutputDir = 'T1NeckCropped'
+	else:
+		InputDir = environmentVariables['T1NECKCROPPED']
+		OutputDir = environmentVariables['T1NECKCROPPED']
+	
+	NIIFileNameBase = os.path.join(InputDir, sys.argv[1])
+	NIIFile = NIIFileNameBase + '_maxlabel_cropped'
+	NIIBrainFile = os.path.join(InputDir, sys.argv[2]) #NIIFileNameBase + '_wsmask_brainmask'
+
+	if os.path.isfile(NIIFile + '.nii') or os.path.isfile(NIIFile + '.nii.gz'):
+		#InFileNII = NiftiImage(NIIBrainFile)
+		#OrigData = numpy.array(InFileNII.data)
+		InFileNII = nibabel.load(NIIBrainFile + ".nii.gz")
+		OrigData = numpy.array(InFileNII.get_data())
+
+		OrigShape = OrigData.shape
+		IMGData = numpy.asarray(OrigData)
+		
+		#L, NumLabels = scipy.ndimage.measurements.label(IMGData)
+		#T = L.flatten()	
+		# get areas of the labels
+		#hist, bin_edges = numpy.histogram(T[numpy.where(T > 0)], bins=numpy.arange(1, NumLabels + 1), range=None, normed=False, weights=None, density=False)
+		#MaxLabel = numpy.argmax(hist) + 1
+		#S = numpy.zeros(T.shape)
+		S = IMGData
+		#del T
+		S = S.astype(numpy.int16)
+		S.resize(OrigShape)
+		#InFileNII.setDataArray(S)
+		#InFileNII.save(os.path.join(OutputDir, sys.argv[1] + '_maxlabel.nii.gz'))
+		#When accessing NIfTI image data through NumPy arrays the order of the dimensions is reversed. If
+		#the x, y, z, t dimensions of a NIfTI image are 64, 64, 32, 456 (as for example reported by nifti_tool),
+		#the shape of the NumPy array (e.g. as returned by NiftiImage.data) will be: 456, 32, 64, 64.
+		#This is done to be able to slice the data array much easier in the most common cases. For example,
+		#if you are interested in a certain volume of a timeseries it is much easier to write data[2] instead of
+		#	data[:,:,:,2], right?
+
+		# find the lowest slice
+		I = numpy.nonzero(S)[0]
+		LastSlice = numpy.min(I)
+		# go down 5mm from lowest slice
+		SliceDownFiveMM = int(numpy.floor(LastSlice - 5 / InFileNII.header['pixdim'][3]))
+		if SliceDownFiveMM < 0:
+			SliceDownFiveMM = 0
+		# crop and save
+		#OrigFileNii = NiftiImage(NIIFile)
+
+		#boundingBox = list(OrigFileNii.bbox)
+		#boundingBox[0] = (SliceDownFiveMM, boundingBox[0][1])
+                
+		#OrigFileNii.crop(bbox=boundingBox)
+		#OrigFileNii.save(os.path.join(OutputDir, sys.argv[1] + '.nii.gz'))
+		
+		I = numpy.where(OrigData > 0)
+		
+		OrigData = numpy.take(OrigData, range(numpy.min(I[0]), numpy.max(I[0]) + 1), axis = 0)
+		OrigData = numpy.take(OrigData, range(numpy.min(I[1]), numpy.max(I[1]) + 1), axis = 1)
+		OrigData = numpy.take(OrigData, range(SliceDownFiveMM, numpy.max(I[2]) + 1), axis = 2)
+
+		#print I
+		#quit()
+		#print boundingBox
+		#boundingBox[0] = (SliceDownTwentyCM, boundingBox[0][1])
+		#print boundingBox
+		#InFileNII.setDataArray(OrigData)
+		#InFileNII.crop(bbox=boundingBox)
+
+		OutFileNII = nibabel.Nifti1Image(OrigData, InFileNII.get_affine())
+		nibabel.save(OutFileNII, os.path.join(OutputDir, sys.argv[1] + '.nii.gz'))
+

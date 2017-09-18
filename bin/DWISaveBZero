@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# performs skull stripping on the T1 and B0 images
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject id>"
+else
+		
+# do the B0 image
+	mkdir -p $DWIBZERO
+	
+	if [ "x`imglob $DWIREORIENT/${1}`" = "x" ]
+	then
+		echo "DWI Reorient image $DWIREORIENT/${1} not found, run --dwi-reorient"
+		exit 1
+	fi
+	fslroi $DWIREORIENT/${1} $DWIBZERO/${1} 0 1
+fi

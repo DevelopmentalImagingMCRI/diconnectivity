@@ -1,0 +1,75 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+# 31/08/2011 changed to NIFTI format
+# 29/03/2012 changed to NIFTI GZIP format
+
+if [ "$#" -lt "5" ]
+then
+	echo "Usage: $0 <subject id> <output dir> <DWI image> <brain mask> <gradient table> [spherical harmonic order]";
+	exit;
+else
+	SUBJECTID=$1
+	OUTPUTROOT=$2
+	INPUTDWIIMAGE=$3
+	BRAINMASK=$4
+	GRADIENTTABLE=$5
+
+	rm -fr $OUTPUTROOT/$SUBJECTID
+	mkdir -p $OUTPUTROOT/$SUBJECTID
+
+	cp $GRADIENTTABLE $OUTPUTROOT/$SUBJECTID/grad.b
+	
+	if [ -z "$6" ]
+	then
+		LMAX=`DWIMrtrixMaxLMAXForGrad $OUTPUTROOT/$SUBJECTID/grad.b`
+		echo "Automatic LMAX: $LMAX"
+	else
+		LMAX=$6
+		echo "Manual LMAX: $LMAX"
+	fi
+	
+	#LMAX=8
+
+	ln -sf `pwd`/$INPUTDWIIMAGE $OUTPUTROOT/$SUBJECTID/dwi.nii.gz
+# change to just NIFTI format
+
+#imrm $OUTPUTROOT/$1/dwi
+#imcp $DWIEDDYCORRECTED/$1 $OUTPUTROOT/$1/dwi
+
+	imcp $BRAINMASK $OUTPUTROOT/$SUBJECTID/mask_manual
+	cd $OUTPUTROOT/$SUBJECTID
+	
+	DWIIMAGE=dwi.nii.gz
+	rm -f dt.nii.gz ev.nii.gz response.txt sf.nii.gz wm.nii.gz wm_t.nii.gz fa.nii.gz CSD.nii.gz mask.nii.gz
+	if [ -f mask_manual.nii.gz ]
+	then
+		imcp mask_manual mask
+	else
+		$MRTRIX2BINDIR/mrconvert $DWIIMAGE -coord 3 0 - | $MRTRIX2BINDIR/threshold - - | $MRTRIX2BINDIR/median3D - - | $MRTRIX2BINDIR/median3D - mask.nii.gz
+	fi
+
+# standard mrtrix pipeline
+	$MRTRIX2BINDIR/dwi2tensor $DWIIMAGE -grad grad.b dt.nii.gz
+	$MRTRIX2BINDIR/tensor2FA dt.nii.gz - | $MRTRIX2BINDIR/mrmult - mask.nii.gz fa.nii.gz
+	$MRTRIX2BINDIR/tensor2vector dt.nii.gz - | $MRTRIX2BINDIR/mrmult - fa.nii.gz ev.nii.gz
+	$MRTRIX2BINDIR/erode mask.nii.gz - | $MRTRIX2BINDIR/erode - - | $MRTRIX2BINDIR/mrmult fa.nii.gz - - | $MRTRIX2BINDIR/threshold - -abs 0.6 sf.nii.gz
+	$MRTRIX2BINDIR/estimate_response $DWIIMAGE sf.nii.gz -lmax $LMAX response.txt -grad grad.b
+	RESPONSEX=`awk '{print $1;}' response.txt`
+	RESPONSEY=`awk '{print $2;}' response.txt`
+	RESPONSEZ=`awk '{print $3;}' response.txt`
+	
+	if [ "$RESPONSEX" != "nan" ] && [ "$RESPONSEY" != "nan" ] && [ "$RESPONSEZ" != "nan" ]
+	then
+#qsub -b y -N CSD -q linux1.q -cwd $MRTRIX2BINDIR/csdeconv $DWIIMAGE response.txt -lmax $LMAX -mask mask.nii.gz CSD.nii.gz -grad grad.b
+		$MRTRIX2BINDIR/csdeconv $DWIIMAGE response.txt -lmax $LMAX -mask mask.nii.gz CSD.nii.gz -grad grad.b
+#$MRTRIX2BINDIR/gen_WM_mask $DWIIMAGE mask.nii.gz wm.nii.gz -grad grad.b
+#$MRTRIX2BINDIR/threshold wm.nii.gz wm_t.nii.gz -abs 0.4
+	else
+		echo "response.txt has NaN values, not executing csdeconv"
+	fi
+
+# now run fsl's dtifit
+
+fi

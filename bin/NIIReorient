@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# swaps orientation of an image to canonical
+# creates a symbolic link
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" -o -z "$2" ]
+then
+	echo "Usage: $0 <input NII> <output NII>"
+else
+
+	INIMG=`remove_ext $1`
+	OUTIMG=`remove_ext $2`
+
+	if [ "x`imglob $INIMG`" = "x" ]
+	then
+		echo "The  image does not exist"
+		exit 1;
+	fi
+
+# get the codes RL PA IS ... for the  and DWI images
+	QFORMCODE=`fslorient -getqformcode $INIMG` 
+	QFORMXORIENT=`fslval $INIMG qform_xorient | sed "s/^\([A-Z]\)[a-z]*-to-\([A-Z]\)[a-z]*/\1\2/" | sed "s/ //g"`
+	QFORMYORIENT=`fslval $INIMG qform_yorient | sed "s/^\([A-Z]\)[a-z]*-to-\([A-Z]\)[a-z]*/\1\2/" | sed "s/ //g"`
+	QFORMZORIENT=`fslval $INIMG qform_zorient | sed "s/^\([A-Z]\)[a-z]*-to-\([A-Z]\)[a-z]*/\1\2/" | sed "s/ //g"`
+	SFORMCODE=`fslorient -getsformcode $INIMG` 
+	SFORMXORIENT=`fslval $INIMG sform_xorient | sed "s/^\([A-Z]\)[a-z]*-to-\([A-Z]\)[a-z]*/\1\2/" | sed "s/ //g"`
+	SFORMYORIENT=`fslval $INIMG sform_yorient | sed "s/^\([A-Z]\)[a-z]*-to-\([A-Z]\)[a-z]*/\1\2/" | sed "s/ //g"`
+	SFORMZORIENT=`fslval $INIMG sform_zorient | sed "s/^\([A-Z]\)[a-z]*-to-\([A-Z]\)[a-z]*/\1\2/" | sed "s/ //g"`
+	LRORIENT=`fslorient -getorient $INIMG`
+
+	if [ "$QFORMCODE" == "0" ]
+	then
+		XORIENT=$SFORMXORIENT
+		YORIENT=$SFORMYORIENT
+		ZORIENT=$SFORMZORIENT
+	else
+		XORIENT=$QFORMXORIENT
+		YORIENT=$QFORMYORIENT
+		ZORIENT=$QFORMZORIENT
+	fi
+
+# determine whether we need to perform the reorientation
+# we want PA and IS in the y and z orientations respectively
+
+	if [ "$YORIENT" == "PA" ] && [ "$ZORIENT" == "IS" ]
+	then
+		SWAP=NO
+	else
+		SWAP=YES
+		if [ "$LRORIENT" == "NEUROLOGICAL" ]
+		then
+			SWAPORIENT="LR PA IS"
+		else
+			SWAPORIENT="RL PA IS"
+		fi
+	fi
+
+	imrm $OUTIMG
+
+	if [ "x$SWAP" == "xYES" ]
+	then
+		fslswapdim $INIMG $SWAPORIENT $OUTIMG
+	else
+		ln -sf ../${INIMG}.nii.gz ${OUTIMG}.nii.gz
+	fi
+fi

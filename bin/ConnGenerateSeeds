@@ -1,0 +1,423 @@
+#!/usr/bin/python
+
+# system includes
+import os
+import tempfile
+import math
+import pickle
+import subprocess
+import re
+import struct
+import sys
+import errno
+
+# PyNIFTI
+#from nifti import *;
+#import nifti.clib as ncl
+
+# numpy, pylab
+#import pylab as P
+
+import nibabel
+
+import numpy
+
+import FreesurferCortexLabelsModule
+
+import DIConnEnv
+
+def setmember1d_nu(a1, a2):
+	if a1.size == 0:
+		return None
+	a2 = set(a2)
+	a1 = numpy.asarray(a1)
+	ind = a1.argsort()
+	a1 = a1[ind]
+	mask  = []
+# need this bit because prev is not defined for first item
+	item  = a1[0]
+	if item in a2:
+		mask.append(True)
+		a2.remove(item)
+	else:
+		mask.append(False)
+	prev = item
+# main loop
+	for item in a1[1:]:
+		if item == prev:
+			mask.append(mask[-1])
+		elif item in a2:
+			mask.append(True)
+			prev = item
+			a2.remove(item)
+		else:
+			mask.append(False)
+			prev = item
+# restore mask to original ordering of a1 and return
+	mask = numpy.array(mask)
+	return mask[ind.argsort()]
+
+# change 27/4/2012
+# make it so that the labels come in as a list whose elements can contain multiple values
+# that way users can specify multiple values for one region
+# values are replaced with the indices of their appearance in the parcellation file
+# e.g.
+#9,10 	Left-Thalamus	lTHAL # 9 and 10 will be replaced with 1
+#11	Left-Caudate	lCAUD , #11 will be replaced with 2
+#12	Left-Putamen	lPUTA , #12 will be replaced with 3 and so on
+
+def extractLabels(IMG = None, Labels = None, binarise = False):
+
+	#print Labels
+	#if isinstance(Labels, numpy.array):
+	#	for i in range(Label.size):
+	#		Remap[Labels[i]] = i + 1
+	Remap = dict()
+	LabelsAll = numpy.array([])
+	if isinstance(Labels, list):
+		for i in range(len(Labels)):
+			for j in range(len(Labels[i])):
+				Remap[Labels[i][j]] = i + 1
+				LabelsAll = numpy.append(LabelsAll, Labels[i][j])
+	elif isinstance(Labels, numpy.ndarray):
+		LabelsAll = numpy.array(Labels)
+		for i in range(Labels.size):
+			Remap[Labels[i]] = i + 1
+	IDX = IMG.nonzero()
+	if IDX[0].size == 0:
+		I = numpy.zeros(IMG.shape, dtype = numpy.uint8)
+	else:
+		INonZero = IMG[IDX]
+		INonZero = setmember1d_nu(INonZero, LabelsAll)
+		
+		I = numpy.array(IMG)
+		I[IDX] = INonZero
+		del INonZero
+		#print I.shape
+		##print I.shape
+		# merge regions if required
+		I.resize(IMG.shape)
+
+		if binarise == False:
+			I = IMG * I
+			IDX = I.nonzero()
+			J = I[IDX]
+			for i in range(J.size):
+				#print str(int(I.flat[i]))
+				J[i] = Remap[J[i]]
+				#f(I.flat[i] > 0):
+				#	print str(I.flat[i]) + " " + str(Remap[I.flat[i]])
+				#I.flat[i] = Remap[I.flat[i]]
+			# remap values to the indices that they appear
+			#I = I.astype(int)
+			I[IDX] = J
+			del J
+		else:
+			I = I.astype(numpy.uint8)
+	return I
+
+def processFile(inputNIIFileName, labels, outputNIIFileName, binarise = False):
+	
+	#print "Processing: " + inputNIIFileName + " to " + outputNIIFileName + ", binarise: " + str(binarise)
+	inputNII = nibabel.load(inputNIIFileName)
+	D = extractLabels(inputNII.get_data(), labels, binarise = binarise)
+	if numpy.all(D == 0):
+		print "Warning, file contained no matches: " + inputNIIFileName
+	else:
+
+		if binarise == False:
+			D = numpy.int32(D)
+
+		outputNII = nibabel.Nifti1Image(D, inputNII.get_affine())
+		outputNII.header['pixdim'] = numpy.array(inputNII.header['pixdim'])
+		nibabel.nifti1.save(outputNII, outputNIIFileName)
+
+def imglob(fileName, returnPrefix = False):
+
+	# remove extension
+	
+	extensions = ['.nii', '.hdr', '.img', '.img.gz', '.nii.gz']
+	
+	REExtensions = [x.replace('.', '\.') for x in extensions]
+	REExpression = '^(.+)(' + "|".join(REExtensions) + ")$"
+	
+	pat = re.compile(REExpression)
+	mat = pat.match(fileName)
+
+	#filePrefix = None
+	#extension = None
+	if mat == None:
+		filePrefix = fileName
+	else:
+		filePrefix = mat.group(1)
+		#extension = mat.group(2)
+
+#	for curExtension in extensions:
+#		if fileName.endswith(curExtension):
+#			extension = curExtension
+#			break
+#		if fileName.endswith(curExtension + ".gz"):
+#			extension = curExtension + ".gz"
+#			break
+##mat = re.match('^(.+)(\.nii|\.nii\.gz|\.hdr|\.hdr\.gz|\.img|\.img\.gz)?$', fileName)
+#	
+#	if extension != None:
+#		filePrefix = fileName[:-len(extension)]
+#	else:
+#		filePrefix = fileName
+#	
+	#print "prefix: " + filePrefix + ", extension: " + str(extension)
+	
+	for curExtension in extensions:
+		if os.path.isfile(filePrefix + curExtension):
+			if returnPrefix == True:
+				return (filePrefix + curExtension, filePrefix)
+			else:
+				return filePrefix + curExtension
+		#if os.path.isfile(filePrefix + curExtension + ".gz"):
+		#	return filePrefix + curExtension + ".gz"
+	return None
+
+def main():
+
+	if len(sys.argv) < 2:
+		print "usage: " + sys.argv[0] + " <subjectid> [schemes...]"
+		quit()
+	
+	CortexLabels = FreesurferCortexLabelsModule.freesurferCortexLabels()
+	
+	subjectID = sys.argv[1]
+	
+	schemesToDo = None
+
+	if len(sys.argv) > 2:
+		schemesToDo = sys.argv[2:]
+
+	environmentVariables = DIConnEnv.getDIConnEnv()
+
+	freesurferBaseLabelDir = environmentVariables['FREESURFERBASELABELS']
+	connectomeSeedsDir = environmentVariables['CONNECTOMESEEDIMAGES']
+	
+	if not os.path.isdir(os.path.join(freesurferBaseLabelDir, subjectID)):
+		print "Freesurfer base label directory not found for " + subjectID + ", run ConnReconAll --struct-extractfreesurferbaselabels " + subjectID
+		quit()
+
+	#try:
+	#	os.makedirs(connectomeSeedsDir)
+	#except OSError as exception:
+	#	if exception.errno != errno.EEXIST:
+	#		raise
+	try:
+		os.makedirs(os.path.join(connectomeSeedsDir, subjectID), mode = 0755)
+	except OSError as exception:
+		if exception.errno != errno.EEXIST:
+			raise
+	
+	APARCFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg'))
+	APARCDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_dwi'))
+	APARCLinearRegFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_linear_reg'))
+	#APARCFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg')
+	#APARCOHNINEFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc.a2009s+aseg')
+	#APARCOHFIVEFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc.a2005s+aseg')
+	#WMPARCFile = os.path.join(freesurferBaseLabelDir, subjectID, 'wmparc')
+
+	# global exclusion regions, use these as exclusion regions unless they are ROIs
+	ExcludeValues = numpy.array([6, 7, 8, 9, 10, 11, 12, 13, 16, 24, 26, 27, 28, 45, 46, 47, 48, 49, 50, 51, 52, 58, 59, 60])
+	#6   Left-Cerebellum-Exterior
+	#7   Left-Cerebellum-White-Matter
+	#8   Left-Cerebellum-Cortex
+	#9   Left-Thalamus
+	#10  Left-Thalamus-Proper
+	#11  Left-Caudate
+	#12  Left-Putamen
+	#13  Left-Pallidum
+	#16  Brain-Stem
+	#24  CSF
+	#26  Left-Accumbens-area
+	#27  Left-Substancia-Nigra
+	#28  Left-VentralDC
+	#45  Right-Cerebellum-Exterior
+	#46  Right-Cerebellum-White-Matter
+	#47  Right-Cerebellum-Cortex
+	#48  Right-Thalamus
+	#49  Right-Thalamus-Proper
+	#50  Right-Caudate
+	#51  Right-Putamen
+	#52  Right-Pallidum
+	#58  Right-Accumbens-area
+	#59  Right-Substancia-Nigra
+	#60  Right-VentralDC
+
+	WMValues = numpy.array([2, 41, 251, 252, 253, 254, 255])
+	#WMValues = numpy.array([2, 41, 11, 12, 13, 28, 26, 27, 50, 51, 52, 58, 59, 251, 252, 253, 254, 255])
+	#2   Left-Cerebral-White-Matter
+	#41  Right-Cerebral-White-Matter
+	#251 CC_Posterior
+	#252 CC_Mid_Posterior
+	#253 CC_Central
+	#254 CC_Mid_Anterior
+	#255 CC_Anterior
+	#print CortexLabels
+	
+	
+	suffixes = ["_dwi", "_linear_reg"]
+	
+	# do the basic WM mask
+
+	processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm_dwi.nii.gz'), binarise = True)
+
+	if schemesToDo != None:
+		realSchemesToDo = list()
+		for curScheme in schemesToDo:
+			if not curScheme in CortexLabels:
+				print "warning, scheme " + curScheme + " not found in library, ignoring"
+			else:
+				realSchemesToDo.append(curScheme)
+		print "Manually selected schemes: "
+		print " ".join(realSchemesToDo)
+	else:
+		realSchemesToDo = CortexLabels.keys()
+	
+	for curScheme in realSchemesToDo:
+		AllLabels = numpy.array([])
+		#AllLabels = numpy.ravel(numpy.array(CortexLabels[curScheme]['values']))
+		for i in range(len(CortexLabels[curScheme]['values'])):
+			AllLabels = numpy.append(AllLabels, CortexLabels[curScheme]['values'][i])
+		curExcludeValues = numpy.setdiff1d(ExcludeValues, AllLabels) 
+		
+		# do T1 space
+		SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile']))
+		if SeedFileName == None:
+			print "Warning, seed file does not exist: " + os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile'])
+		else:
+			processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '.nii.gz'), binarise = False) 
+			processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '_mask.nii.gz'), binarise = True) 
+			processFile(SeedFileName, curExcludeValues, os.path.join(connectomeSeedsDir, subjectID, 'excludes_' + curScheme.lower() + '.nii.gz'), binarise = True) 
+
+		for curSuffix in suffixes:
+			SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile'] + curSuffix))
+			if SeedFileName != None:
+				processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + curSuffix + '.nii.gz'), binarise = False) 
+				processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + curSuffix + '_mask.nii.gz'), binarise = True) 
+				processFile(SeedFileName, curExcludeValues, os.path.join(connectomeSeedsDir, subjectID, 'excludes_' + curScheme.lower() + curSuffix + '.nii.gz'), binarise = True) 
+	#for curScheme in CortexLabels:
+
+
+#def main():
+#
+#	if len(sys.argv) < 2:
+#		print "usage: " + sys.argv[0] + " <subjectid>"
+#		quit()
+#	else:
+#		CortexLabels = FreesurferCortexLabelsModule.freesurferCortexLabels()
+#	
+#	subjectID = sys.argv[1]
+#
+#	environmentVariables = DIConnEnv.getDIConnEnv()
+#
+#	freesurferBaseLabelDir = environmentVariables['FREESURFERBASELABELS']
+#	connectomeSeedsDir = environmentVariables['CONNECTOMESEEDIMAGES']
+#	
+#	try:
+#		os.makedirs(connectomeSeedsDir)
+#	except OSError as exception:
+#		if exception.errno != errno.EEXIST:
+#			raise
+#	try:
+#		os.makedirs(os.path.join(connectomeSeedsDir, subjectID))
+#	except OSError as exception:
+#		if exception.errno != errno.EEXIST:
+#			raise
+#	
+#	APARCFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg'))
+#	APARCDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_dwi'))
+#	APARCLinearRegFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_linear_reg'))
+#
+#	#APARCFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg')
+#	#APARCOHNINEFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc.a2009s+aseg')
+#	#APARCOHFIVEFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc.a2005s+aseg')
+#	#WMPARCFile = os.path.join(freesurferBaseLabelDir, subjectID, 'wmparc')
+#
+#	# global exclusion regions, use these as exclusion regions unless they are ROIs
+#	ExcludeValues = numpy.array([6, 7, 8, 9, 10, 11, 12, 13, 16, 24, 26, 27, 28, 45, 46, 47, 48, 49, 50, 51, 52, 58, 59, 60])
+#	#6   Left-Cerebellum-Exterior
+#	#7   Left-Cerebellum-White-Matter
+#	#8   Left-Cerebellum-Cortex
+#	#9   Left-Thalamus
+#	#10  Left-Thalamus-Proper
+#	#11  Left-Caudate
+#	#12  Left-Putamen
+#	#13  Left-Pallidum
+#	#16  Brain-Stem
+#	#24  CSF
+#	#26  Left-Accumbens-area
+#	#27  Left-Substancia-Nigra
+#	#28  Left-VentralDC
+#	#45  Right-Cerebellum-Exterior
+#	#46  Right-Cerebellum-White-Matter
+#	#47  Right-Cerebellum-Cortex
+#	#48  Right-Thalamus
+#	#49  Right-Thalamus-Proper
+#	#50  Right-Caudate
+#	#51  Right-Putamen
+#	#52  Right-Pallidum
+#	#58  Right-Accumbens-area
+#	#59  Right-Substancia-Nigra
+#	#60  Right-VentralDC
+#
+#	WMValues = numpy.array([2, 41, 251, 252, 253, 254, 255])
+#	#WMValues = numpy.array([2, 41, 11, 12, 13, 28, 26, 27, 50, 51, 52, 58, 59, 251, 252, 253, 254, 255])
+#	#2   Left-Cerebral-White-Matter
+#	#41  Right-Cerebral-White-Matter
+#	#251 CC_Posterior
+#	#252 CC_Mid_Posterior
+#	#253 CC_Central
+#	#254 CC_Mid_Anterior
+#	#255 CC_Anterior
+#	#print CortexLabels
+#	suffixes = ["_dwi", "_linear_reg"]
+#
+#	for curScheme in CortexLabels:
+#		AllLabels = numpy.array([])
+#		
+#		for i in range(len(CortexLabels[curScheme]['values'])):
+#			AllLabels = numpy.append(AllLabels, CortexLabels[curScheme]['values'][i])
+#		curExcludeValues = numpy.setdiff1d(ExcludeValues, AllLabels) 
+#		
+#		# do T1 space
+#		SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile']))
+#		if SeedFileName != None:
+#			processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '.nii.gz'), binarise = False) 
+#			processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '_mask.nii.gz'), binarise = True) 
+#			processFile(SeedFileName, curExcludeValues, os.path.join(connectomeSeedsDir, subjectID, 'excludes_' + curScheme.lower() + '.nii.gz'), binarise = True) 
+#
+#		for curSuffix in suffixes:
+#			SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile'] + curSuffix))
+#			if SeedFileName != None:
+#				processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + curSuffix + '.nii.gz'), binarise = False) 
+#				processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + curSuffix + '_mask.nii.gz'), binarise = True) 
+#				processFile(SeedFileName, curExcludeValues, os.path.join(connectomeSeedsDir, subjectID, 'excludes_' + curScheme.lower() + curSuffix + '.nii.gz'), binarise = True) 
+#	#for curScheme in CortexLabels:
+#
+#	# do T1 space
+#	if APARCFile != None:
+#		processFile(APARCFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.nii.gz'), binarise = True)
+#	else:
+#		print "warning: aparc+aseg file not found"
+#
+#	# do DWI space
+#	if APARCDWIFile != None:
+#		processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm_dwi.nii.gz'), binarise = True)
+#	else:
+#		print "warning: aparc+aseg_dwi file not found"
+#	
+#	# do T1-distorted space
+#	if APARCLinearRegFile != None:
+#		processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm_linear_reg.nii.gz'), binarise = True)
+#	else:
+#		print "warning: aparc+aseg_dwi file not found"
+#
+#
+
+if __name__ == "__main__":
+	main()

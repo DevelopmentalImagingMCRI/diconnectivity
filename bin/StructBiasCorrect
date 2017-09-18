@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# performs skull stripping on the T1 and B0 images
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject id> [non-default N4 options]"
+else
+	mkdir -p $T1BIASCORRECTED
+	
+	SUBJECTID=$1
+	if [ "x`imglob $T1NECKCROPPED/${SUBJECTID}`" = "x" ]
+	then
+		echo "Neck cropped file $T1NECKCROPPED/${SUBJECTID} doesnt exist, run --struct-neckcrop"
+		exit 1;
+	fi
+	
+# move the subject id off the argument stack, options are in remaining arguments
+	shift;
+
+#if [ -z `imglob $T1BIASCORRECTED/${1}` ]
+#then
+#N4BiasFieldCorrection -v -c [100x100x100x100,0] -b [200] -s 3 -i $T1NECKCROPPED/${SUBJECTID}.nii.gz -o $T1BIASCORRECTED/${SUBJECTID}.nii.gz 
+		N4BiasFieldCorrection -i $T1NECKCROPPED/${SUBJECTID}.nii.gz -o $T1BIASCORRECTED/${SUBJECTID}.nii.gz $@
+#fi
+fi

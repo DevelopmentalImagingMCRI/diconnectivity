@@ -1,0 +1,122 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+
+# extracts the base freesurfer label images for later seed generation
+# puts the outputs in T1 and DWI space
+# looks for existence of a non-linear warp and applies it, used in cases where no blip up/down images are available
+export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=8
+
+if [ -z "$1" -o -z "$2" ]
+then
+	echo "Usage: $0 <subject id> <mrtrixversion> [freesurferlong]"
+else
+	
+#	if [ ! -z "`mrtransform -version | grep "mrtransform 0.2"`" ]
+#	then
+#		MRTRANSFORMVERSION=2
+#	elif [ ! -z "`mrtransform -version | grep "mrtransform 0.3"`" ]
+#	then
+#		MRTRANSFORMVERSION=3
+#	else
+#		echo "mrtransform version unknown, I have to use flirt"
+#		MRTRANSFORMVERSION=0
+#	fi
+
+	
+	SUBJECTID=$1
+	MRTRANSFORMVERSION=$2
+	FREESURFERLONG=$3
+	
+	if [ ! -z "$FREESURFERLONG" ]
+	then
+		FREESURFERSUBJECT=$FREESURFERLONG
+	else
+		FREESURFERSUBJECT=$SUBJECTID
+	fi
+	INDIR=$DWIREGTOSTRUCT/${SUBJECTID}
+	OUTDIR=$FREESURFERBASELABELS/$SUBJECTID
+	
+	rm -fr $OUTDIR
+	mkdir -p $OUTDIR
+
+	FILES=("rawavg" "aparc.a2009s+aseg" "aparc+aseg" "wmparc")
+	#FILES=("rawavg")
+#FILES=("aparc+aseg")
+# 31/08/2001 changed to NIFTI format
+#mri_convert $FREESURFER/$1/mri/orig/001.mgz $FREESURFER/$1/mri/orig/001.nii.gz
+#imcp $FREESURFER/$1/mri/orig/001.nii.gz $OUTDIR
+#WarpImageMultiTransform 3 $OUTDIR/001.nii.gz $OUTDIR/001_linear_reg.nii.gz -R $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg.nii.gz -i $DWIREGTOSTRUCT/$1/bzero_registered_to_structuralAffine.txt $DWIREGTOSTRUCT/$1/bzero_registered_to_structuralInverseWarp.nii.gz
+#imrm $OUTDIR/001_dwi
+#mrtransform $OUTDIR/001_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg.mat -reference $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz -inverse -flipx $OUTDIR/001_dwi.nii.gz
+#convert_xfm -omat $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg_inv.mat -inverse $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg.mat
+#flirt -applyxfm -in $OUTDIR/001_linear_reg -init $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg_inv.mat -ref $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz  -out $OUTDIR/001_dwi_flirt
+	
+	convert_xfm -omat $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -inverse $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat
+	
+	if [ "$MRTRANSFORMVERSION" = "3" ]
+	then
+#$MRTRIX3BINDIR/transformcalc -force -flirt_import $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_mrtrix.mat
+		$MRTRIX3BINDIR/transformcalc -force $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz flirt_import $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_mrtrix.mat
+#matrix_in in ref flirt_import output
+#-force -flirt_import $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_mrtrix.mat
+	fi
+#lirt 
+
+	for i in "${FILES[@]}"
+	do
+
+# reslice the segmentation back to native T1 space
+		if [ -f "$FREESURFER/$FREESURFERSUBJECT/mri/${i}.mgz" ]
+		then
+			mri_convert -rl $FREESURFER/$SUBJECTID/mri/orig/001.mgz -rt nearest $FREESURFER/$FREESURFERSUBJECT/mri/${i}.mgz $OUTDIR/${i}.nii.gz --no_scale 1 -odt int
+
+# invert the non-linear transformation of ANTS
+#fslchfiletype NIFTI_GZ $OUTDIR/$i.nii
+
+			imrm $OUTDIR/${i}_dwi
+			
+			if [ "x`imglob $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz`" != "x" ]
+			then
+#echo "ANTS warp found, applying"
+				imrm $OUTDIR/${i}_linear_reg
+				WarpImageMultiTransform 3 $OUTDIR/${i}.nii.gz $OUTDIR/${i}_linear_reg.nii.gz -R $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.nii.gz --use-NN $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initInverseWarp.nii.gz
+			else
+#echo "No ANTS warp found, just running mrtransform"
+				imcp $OUTDIR/${i} $OUTDIR/${i}_linear_reg
+			fi
+
+# find the version of mrtransform
+# look for mrtrix 2
+#MRTRANSFORMVERSION=2
+#/home/addo/mrtrix-0.2.12/bin/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat -reference $DWIBZERO/${SUBJECTID}.nii.gz -inverse -flipx $OUTDIR/${i}_dwi2.nii.gz
+#/home/addo/dev/mrtrix3/bin/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_mrtrix.mat $OUTDIR/${i}_dwi3.nii.gz
+			case $MRTRANSFORMVERSION in
+			2)
+				$MRTRIX2BINDIR/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat -reference $DWIBZERO/${SUBJECTID}.nii.gz -inverse -flipx $OUTDIR/${i}_dwi.nii.gz
+				;;
+			3)
+				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_mrtrix.mat $OUTDIR/${i}_dwi.nii.gz
+				;;
+			0)
+				flirt -applyxfm -in $OUTDIR/${i}_linear_reg -init $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -ref $DWIBZERO/${SUBJECTID}  -out $OUTDIR/${i}_dwi -interp nearestneighbour
+				;;
+			esac
+#imrm $OUTDIR/${i}_linear_reg
+# invert the linear transformation of FLIRT using mrtransform
+#fslorient $OUTDIR/${i}_linear_reg
+#fslswapdim $OUTDIR/${i}_linear_reg LR PA IS $OUTDIR/${i}_linear_reg
+#fslchfiletype NIFTI $OUTDIR/${i}_linear_reg
+#mrconvert $OUTDIR/${i}_linear_reg.nii $OUTDIR/${i}_linear_reg.mif
+#fslchfiletype NIFTI_GZ $OUTDIR/${i}_linear_reg
+# the next line is for MIF
+#mrtransform $OUTDIR/${i}_linear_reg.nii -transform $REGBZEROTOT1/bzero_brain_linear_reg.mat -reference $OUTDIR/bzero_brain.nii -inverse -flipx $OUTDIR/${i}_dwi.mif
+#	mrtransform $OUTDIR/${i}_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat -reference $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz -inverse -flipx $OUTDIR/${i}_dwi.nii.gz
+#fslchfiletype NIFTI_GZ $OUTDIR/${i}_dwi
+#mrtransform $OUTDIR/${i}_linear_reg.nii -transform $REGBZEROTOT1/bzero_brain_linear_reg.mat -reference $OUTDIR/bzero_brain.nii -inverse -flipx $OUTDIR/${i}_dwi_flipx.nii
+#		flirt -applyxfm -in $OUTDIR/${i}_linear_reg -init $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -ref $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz  -out $OUTDIR/${i}_dwi_flirt -interp nearestneighbour
+		fi
+	done
+#fslchfiletype NIFTI_GZ $OUTDIR/bzero_brain
+fi

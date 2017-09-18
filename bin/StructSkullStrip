@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# performs skull stripping on the T1 and B0 images
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject id> [--bet or --freesurfer or --ws]"
+else
+	SUBJECTID=$1
+	SKULLSTRIPMETHOD=$2
+	
+	if [ "x`imglob $T1BIASCORRECTED/${SUBJECTID}`" = "x" ]
+	then
+		echo "Bias corrected file $T1BIASCORRECTED/${SUBJECTID} doesnt exist, run --struct-biascorrect"
+		exit 1;
+	fi
+	
+
+#mkdir -p $T1SKULLSTRIPPED/$SUBJECTID
+	mkdir -p $T1SKULLSTRIPPED
+	
+	case $SKULLSTRIPMETHOD in
+	--bet)
+		bet $T1BIASCORRECTED/${SUBJECTID} $T1SKULLSTRIPPED/${SUBJECTID} -f 0.3 -R -m
+		;;
+	--freesurfer)
+		if [ ! -f "$FREESURFER/$SUBJECTID/mri/brainmask.mgz" ]
+		then
+			echo "Freesurfer method was selected but brainmask.mgz doesnt exist: $FREESURFER/$SUBJECTID/mri/brainmask.mgz"
+			exit 1
+		else
+			# binarize the brainmask image
+			mri_binarize --i $FREESURFER/$SUBJECTID/mri/brainmask.mgz --o $FREESURFER/$SUBJECTID/mri/brainmask_bin.mgz --min 1 --dilate 2 --erode 2
+			# reslice it to original space
+			mri_convert -rt nearest -rl $FREESURFER/$SUBJECTID/mri/orig/001.mgz --no_scale 1 -odt uchar $FREESURFER/$SUBJECTID/mri/brainmask_bin.mgz $FREESURFER/$SUBJECTID/mri/orig/brainmask_bin.mgz
+#mri_convert $FREESURFER/$SUBJECTID/mri/orig/brainmask_bin.mgz $FREESURFER/$SUBJECTID/mri/orig/brainmask_bin.nii.gz
+			# mask the original image with the mask
+			mri_mask $FREESURFER/$SUBJECTID/mri/orig/001.mgz $FREESURFER/$SUBJECTID/mri/orig/brainmask_bin.mgz $FREESURFER/$SUBJECTID/mri/orig/001_brain.mgz
+			mri_convert $FREESURFER/$SUBJECTID/mri/orig/001_brain.mgz $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz
+			mri_convert $FREESURFER/$SUBJECTID/mri/orig/brainmask_bin.mgz $T1SKULLSTRIPPED/${SUBJECTID}_mask.nii.gz
+			rm -f $FREESURFER/$SUBJECTID/mri/orig/brainmask_bin.mgz $FREESURFER/$SUBJECTID/mri/orig/001_brain.mgz $FREESURFER/$SUBJECTID/mri/brainmask_bin.mgz
+		fi
+		;;
+	--ws)
+		T=`tmpnam`
+		rm -f $T
+		mkdir -p $T
+		scalperWSTrials --nothickskull --roughOpenRadius 10 -i $T1BIASCORRECTED/${SUBJECTID}.nii.gz -o $T/wsmask
+		immv $T/wsmask_brain $T1SKULLSTRIPPED/${SUBJECTID}
+		immv $T/wsmask_brainmask $T1SKULLSTRIPPED/${SUBJECTID}_mask
+		rm -fr $T
+		;;
+	esac
+
+fi

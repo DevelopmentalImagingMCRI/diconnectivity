@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# swaps the orientation of the T1 and DWI images to canonical orientation, i.e. 
+# RL PA IS for radiological
+# LR PA IS for neurological
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject id>"
+else
+
+	if [ "x`imglob $RAWT1/$1`" = "x" ]
+	then
+		echo "The T1 image $RAWT1/$1 does not exist"
+		exit 1;
+	fi
+
+	mkdir -p $T1REORIENT
+
+	NIIReorient $RAWT1/$1 $T1REORIENT/$1
+fi

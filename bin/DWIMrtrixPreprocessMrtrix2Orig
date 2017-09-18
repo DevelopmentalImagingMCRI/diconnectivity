@@ -1,0 +1,68 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+# 31/08/2011 changed to NIFTI format
+# 29/03/2012 changed to NIFTI GZIP format
+
+if [ "$#" -lt "1" ]
+then
+	echo "Usage: $0 <subject id> [spherical harmonic order]";
+	exit;
+else
+	SUBJECTID=$1
+	
+	rm -fr $MRTRIXDIR/$SUBJECTID
+	mkdir -p $MRTRIXDIR/$SUBJECTID
+
+	cp $DWIREGTOSTRUCT/${SUBJECTID}/dwi_ants_raw_reg.grad $MRTRIXDIR/$SUBJECTID/grad.b
+	if [ -z "$2" ]
+	then
+		LMAX=`DWIMrtrixMaxLMAXForGrad $MRTRIXDIR/$SUBJECTID/grad.b`
+		echo "Automatic LMAX: $LMAX"
+	else
+		LMAX=$2
+		echo "Manual LMAX: $LMAX"
+	fi
+	
+
+	ln -sf `pwd`/$DWIREGTOSTRUCT/${SUBJECTID}/dwi_ants_raw_reg.nii.gz $MRTRIXDIR/$SUBJECTID/dwi.nii.gz
+# change to just NIFTI format
+
+#imrm $MRTRIXDIR/$1/dwi
+#imcp $DWIEDDYCORRECTED/$1 $MRTRIXDIR/$1/dwi
+
+	imcp $T1SKULLSTRIPPED/${SUBJECTID}_mask $MRTRIXDIR/$SUBJECTID/mask_manual
+	cd $MRTRIXDIR/$SUBJECTID
+	
+	DWIIMAGE=dwi.nii.gz
+	rm -f dt.nii.gz ev.nii.gz response.txt sf.nii.gz wm.nii.gz wm_t.nii.gz fa.nii.gz CSD.nii.gz mask.nii.gz
+	if [ -f mask_manual.nii.gz ]
+	then
+		imcp mask_manual mask
+	else
+		mrconvert $DWIIMAGE -coord 3 0 - | threshold - - | median3D - - | median3D - mask.nii.gz
+	fi
+
+# standard mrtrix pipeline
+	dwi2tensor $DWIIMAGE -grad grad.b dt.nii.gz
+	tensor2FA dt.nii.gz - | mrmult - mask.nii.gz fa.nii.gz
+	tensor2vector dt.nii.gz - | mrmult - fa.nii.gz ev.nii.gz
+	erode mask.nii.gz - | erode - - | mrmult fa.nii.gz - - | threshold - -abs 0.6 sf.nii.gz
+	estimate_response $DWIIMAGE sf.nii.gz -lmax $LMAX response.txt -grad grad.b
+	RESPONSEX=`awk '{print $1;}' response.txt`
+	RESPONSEY=`awk '{print $2;}' response.txt`
+	RESPONSEZ=`awk '{print $3;}' response.txt`
+	
+	if [ "$RESPONSEX" != "nan" ] && [ "$RESPONSEY" != "nan" ] && [ "$RESPONSEZ" != "nan" ]
+	then
+		csdeconv $DWIIMAGE response.txt -lmax $LMAX -mask mask.nii.gz CSD.nii.gz -grad grad.b
+		gen_WM_mask $DWIIMAGE mask.nii.gz wm.nii.gz -grad grad.b
+		threshold wm.nii.gz wm_t.nii.gz -abs 0.4
+	else
+		echo "response.txt has NaN values, not executing csdeconv"
+	fi
+
+# now run fsl's dtifit
+
+fi

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+cd $RAWT1REORIENTCROPPED
+
+slicesdir $(cat ../dwi_good_ids.txt)

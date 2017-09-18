@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# swaps the orientation of the T1 and DWI images to canonical orientation, i.e. 
+# RL PA IS for radiological
+# LR PA IS for neurological
+
+. `which DIConnEnv.sh`
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject id>"
+else
+
+	if [ "x`imglob $T1REORIENT/$1`" = "x" ]
+	then
+		echo "The Raw T1 reoriented file $T1REORIENT/$1 does not exist, run --struct-reorient"
+		exit 1;
+	fi
+
+	mkdir -p $T1NECKCROPPED
+# crop T1
+
+#flirt -in $T1REORIENT/$1 -ref $FSLDIR/data/standard/avg152T1 -omat $T1NECKCROPPED/${1}_to_std_translation.mat -schedule $FSLDIR/etc/flirtsch/xyztrans.sch -cost mutualinfo -out $T1NECKCROPPED/${1}_to_std_translation
+#flirt -in $T1REORIENT/$1 -ref $FSLDIR/data/standard/avg152T1 -omat $T1NECKCROPPED/${1}_to_std_affine.mat -out $T1NECKCROPPED/${1}_to_std_affine -init $T1NECKCROPPED/${1}_to_std_translation.mat -dof 12 -cost mutualinfo -searchrx -30 30 -searchry -30 30 -searchrz -30 30
+#flirt -in $T1REORIENT/$1 -ref $FSLDIR/data/standard/avg152T1 -omat $T1NECKCROPPED/${1}_to_std_affine_notranslation.mat -out $T1NECKCROPPED/${1}_to_std_affine_notranslation -dof 12 -cost mutualinfo -searchrx -30 30 -searchry -30 30 -searchrz -30 30
+
+# make sure we are using the good version of lapack
+# avoid the ATL_chemv symbol error on lamina
+	export LD_LIBRARY_PATH=/usr/lib/lapack:$LD_LIBRARY_PATH
+
+	StructNeckCropInitialCrop $1
+#exit
+#	if [ $USEFLIRTSTAGE1 == "true" ]
+#	then
+	flirt -in $T1NECKCROPPED/${1}_maxlabel_cropped -ref $FSLDIR/data/standard/avg152T1 -omat $T1NECKCROPPED/${1}_to_std_affine_precropped.mat -dof 12 -cost mutualinfo -searchrx -30 30 -searchry -30 30 -searchrz -30 30
+
+	convert_xfm -omat $T1NECKCROPPED/std_to_${1}_affine_precropped.mat -inverse $T1NECKCROPPED/${1}_to_std_affine_precropped.mat
+
+# use the centre point at the bottom slice in the standard space registered to the cropped image
+# sometimes cuts off the bottom of the cerebellum for rotated images
+#TMPCOORD=`tmpnam`
+#
+#echo "45 54 0" > $TMPCOORD
+#
+#TRANSFORMEDCOORD=`img2imgcoord -src $T1NECKCROPPED/${1}_to_std_affine_precropped -dest $T1NECKCROPPED/${1}_maxlabel_cropped.nii.gz -xfm $T1NECKCROPPED/std_to_${1}_affine_precropped.mat $TMPCOORD | tail -n 1 | awk '{printf("%d", $3)}'`
+#rm -f  $TMPCOORD
+#
+#ZSIZE=`fslval $T1NECKCROPPED/${1}_maxlabel_cropped dim3`
+#ZREMAINING=`expr $ZSIZE - $TRANSFORMEDCOORD`
+#
+#fslroi $T1NECKCROPPED/${1}_maxlabel_cropped $T1NECKCROPPED/${1}_cropped_centre 0 `fslval $T1NECKCROPPED/${1}_maxlabel_cropped dim1` 0 `fslval $T1NECKCROPPED/${1}_maxlabel_cropped dim2` $TRANSFORMEDCOORD $ZREMAINING
+#echo $TRANSFORMEDCOORD
+
+#flirt -in `dirname $0`/../lib/avg152T1_bottom_slice_mask -ref $T1NECKCROPPED/${1}_maxlabel_cropped -out $T1NECKCROPPED/std_to_${1}_affine_precropped -init $T1NECKCROPPED/std_to_${1}_affine_precropped.mat -applyxfm
+
+	ZSIZE=`fslval $T1NECKCROPPED/${1}_maxlabel_cropped dim3`
+# get the bottom slice from transforming the brain mask to the precropped image
+	flirt -in $FSLDIR/data/standard/avg152T1_brain -ref $T1NECKCROPPED/${1}_maxlabel_cropped -out $T1NECKCROPPED/std_brain_to_${1}_affine_precropped -init $T1NECKCROPPED/std_to_${1}_affine_precropped.mat -applyxfm
+	ZBRAIN=`fslstats $T1NECKCROPPED/std_brain_to_${1}_affine_precropped -w | awk '{print $5}'`
+	ZREMAINING=`expr $ZSIZE - $ZBRAIN`
+	fslroi $T1NECKCROPPED/${1}_maxlabel_cropped $T1NECKCROPPED/${1} 0 `fslval $T1NECKCROPPED/${1}_maxlabel_cropped dim1` 0 `fslval $T1NECKCROPPED/${1}_maxlabel_cropped dim2` $ZBRAIN $ZREMAINING
+	rm -f $T1NECKCROPPED/std_to_${1}_affine_precropped.mat $T1NECKCROPPED/${1}_to_std_affine_precropped.mat
+	imrm $T1NECKCROPPED/std_brain_to_${1}_affine_precropped
+#lirt -in $T1REORIENT/$1 -ref $FSLDIR/data/standard/avg152T1 -out $T1NECKCROPPED/${1}_to_std_affine -init $T1NECKCROPPED/${1}_to_std_affine.mat -applyxfm
+#fi
+
+#	if [ ${USEWSSCALPSTAGE1} == "true" ] ; then
+## simple version of watershed scalper. This doesn't use the methods for thick skull, or refinement as we only want to crop.
+## the final opening is made large to clip off the brainstem, and will mess up some other parts of the segmentation, but we don't care.
+#		scalperWSTrials --nothickskull --roughOpenRadius 10 -i $T1NECKCROPPED/${1}_maxlabel_cropped.nii.gz -o $T1NECKCROPPED/${1}_wsmask
+#
+#		imrm  $T1NECKCROPPED/${1}_wsmask_brainmaskrough $T1NECKCROPPED/${1}_wsmask_brain
+#		StructNeckCropFinalCrop $1 ${1}_wsmask_brainmask
+#	fi
+#
+#	if [ ${USEBETSCALPSTAGE1} == "true" ] ; then
+#		bet $T1NECKCROPPED/${1}_maxlabel_cropped $T1NECKCROPPED/${1} -m -n
+#		StructNeckCropFinalCrop $1 ${1}_mask
+#	fi
+	imrm $T1NECKCROPPED/${1}_wsmask_brainmask
+	imrm $T1NECKCROPPED/${1}_maxlabel_cropped
+fi

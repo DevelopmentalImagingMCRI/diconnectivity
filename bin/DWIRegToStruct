@@ -1,0 +1,194 @@
+#!/bin/bash
+
+. `which DIConnEnv.sh`
+
+export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=8
+if [ -z "$1"  -o -z "$2" ]
+then
+	echo "Usage: $0 <subject id> <--dwi-use-blipud or --dwi-use-eddycorrect>"
+else
+	
+	SUBJECTID=$1
+	DISTMETHOD=$2
+	
+	if [ "x`imglob $T1SKULLSTRIPPED/${SUBJECTID}`" = "x" ]
+	then
+		echo "Bias corrected file $T1SKULLSTRIPPED/${SUBJECTID} doesnt exist, run --struct-skullstrip"
+		exit 1;
+	fi
+	
+# previously had the distortion method check, 
+
+#if [ "x`imglob $DWIEDDYCORRECTED/${SUBJECTID}`" = "x" ]
+#then
+#	echo "Eddy corrected file $DWIEDDYCORRECTED/${SUBJECTID} doesnt exist, run --dwi-distortion-correct --dwi-use-eddycorrect"
+#	exit 1;
+#		fi
+			
+		if [ "x`imglob $DWISKULLSTRIPPED/${SUBJECTID}`" = "x" ]
+		then
+			echo "Skull stripped file $DWISKULLSTRIPPED/${SUBJECTID} doesnt exist, run --dwi-skullstrip"
+			exit 1;
+		fi
+
+		mkdir -p $DWIREGTOSTRUCT/$SUBJECTID
+		
+# invert the contrast of the T1 structural to make it look like a T2 image, save as structural_brain_inverted
+# structural_brain_inverted = max(structural_brain) - structural_brain
+		MAXINTENSITY=`fslstats $T1SKULLSTRIPPED/${SUBJECTID} -R | cut -f2 -d \  `
+		fslmaths $T1SKULLSTRIPPED/${SUBJECTID} -mul -1 -add $MAXINTENSITY -mas $T1SKULLSTRIPPED/${SUBJECTID}_mask $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted
+		
+		FLIRTOUTPREFIX="bzero_brain_linear_reg"
+# perform a FLIRT, affine registration of the BZero brain to structural_brain_inverted
+# save the registered image as bzero_brain_linear_reg
+		FLIRTDEGREES=15
+		flirt -in $DWISKULLSTRIPPED/${SUBJECTID} -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted -out $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX} -omat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat -cost mutualinfo -searchrx -$FLIRTDEGREES $FLIRTDEGREES -searchry -$FLIRTDEGREES $FLIRTDEGREES -searchrz -$FLIRTDEGREES $FLIRTDEGREES -usesqform
+# check	the scaling parameters of the output transform, if the scaling in any dimension is out of the range 0.95 - 1.05 then redo the registration without -usesqform
+
+		XSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat | grep "^Scales" | cut -f2 -d= | awk '{print $1}'`
+		YSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat | grep "^Scales" | cut -f2 -d= | awk '{print $2}'`
+		ZSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat | grep "^Scales" | cut -f2 -d= | awk '{print $3}'`
+		
+#echo $XSCALE $YSCALE $ZSCALE
+#echo `echo "$XSCALE > 1.05" | bc`
+#echo `echo "$XSCALE < 1.95" | bc`
+		
+		LTHRESH=0.95
+		UTHRESH=1.05
+		if [\
+			"`echo "$XSCALE < $LTHRESH" | bc`" == "1" -o \
+			"`echo "$XSCALE > $UTHRESH" | bc`" == "1" -o \
+			"`echo "$YSCALE < $LTHRESH" | bc`" == "1" -o \
+			"`echo "$YSCALE > $UTHRESH" | bc`" == "1" -o \
+			"`echo "$ZSCALE < $LTHRESH" | bc`" == "1" -o \
+			"`echo "$ZSCALE > $UTHRESH" | bc`" == "1" ]
+		then
+			echo "initial flirt transformation corrupted, redoing without -usesqform"
+			flirt -in $DWISKULLSTRIPPED/${SUBJECTID} -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted -out $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX} -omat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat -cost mutualinfo -searchrx -$FLIRTDEGREES $FLIRTDEGREES -searchry -$FLIRTDEGREES $FLIRTDEGREES -searchrz -$FLIRTDEGREES $FLIRTDEGREES
+		fi
+# transform the FLIRT transformation into ITK format, needed for ANTS
+		c3d_affine_tool -ref $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz -src $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat -fsl2ras -oitk $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_itk.mat
+
+# run ANTS with the FLIRT transformation as the initialiser, do not perform affine registration with ANTS
+		ANTS 3 -m CC[$DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz,$DWISKULLSTRIPPED/${SUBJECTID}.nii.gz,1,4] -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init.nii.gz --use-Histogram-Matching -i 100x50x25 -r Gauss[0.5] -t SyN[0.5] --continue-affine false --initial-affine $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_itk.mat
+		
+#antsRegistration -d 3 --initial-moving-transform $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_itk.mat -m CC[$DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz,$DWISKULLSTRIPPED/${SUBJECTID}.nii.gz,1,4,Random,0.5] --use-histogram-matching -o [$DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init_antsRegistration.nii.gz,$DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init_antsRegistrationDeformed.nii.gz] -c 100x50x25 -t SyN[0.5] -v --shrink-factors 4x2x1 --smoothing-sigmas 4x2x1vox --float
+#exit;
+# apply the nonlinear ANTS transform to the bzero image to put it into T1 space, 
+		antsApplyTransforms --float -v -e 0 -i $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -r $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt 
+			
+#WarpImageMultiTransform 3 $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_reg_itk_ants.nii.gz -R $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt
+
+# rotate the b-matrix using the FLIRT transformation
+		DWIRotateGradWithFLIRT $RAWDWI/${SUBJECTID}.grad $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat $DWIREGTOSTRUCT/${SUBJECTID}/linear_reg_no_eddy_reorient.grad
+#c3d_affine_tool -ref $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz -src $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -ras2fsl -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.mat
+#SECONDS=0
+		FINALREGDATATYPE="short"
+		
+		
+		if [ ! -z "`imglob $DWIEDDYCORRECTED/${SUBJECTID}.nii.gz`" ]
+		then
+# warp the entire DWI image to T1 space using the ANTS transformation
+			
+			#antsApplyTransforms --float -v -e 3 -i $DWIEDDYCORRECTED/${SUBJECTID}.nii.gz -r $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz -o $DWIREGTOSTRUCT/${SUBJECTID}/dwi_ants_reg.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt 
+# warp the entire DWI image to T1 space using only the FLIRT transformation
+			flirt -in $DWIEDDYCORRECTED/${SUBJECTID} -ref $T1SKULLSTRIPPED/${SUBJECTID} -out $DWIREGTOSTRUCT/${SUBJECTID}/dwi_linear_reg -applyxfm -init $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat -datatype $FINALREGDATATYPE
+
+# applywarp testing
+
+			NUMVOLUMES=`fslsize $DWIEDDYCORRECTED/${SUBJECTID} | grep ^dim4 | awk '{print $2}'`
+			cat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat
+			T=`tmpnam`
+			rm -f $T
+			for i in `seq 1 $NUMVOLUMES`
+			do
+				cat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat >> $T
+			done
+#cat $T
+#exit
+			applywarp --in=$DWIEDDYCORRECTED/${SUBJECTID} --ref=$T1SKULLSTRIPPED/${SUBJECTID} --out=$DWIREGTOSTRUCT/${SUBJECTID}/dwi_linear_reg_applywarp --premat=$T --interp=trilinear
+#ANTSSSECONDS=$SECONDS
+#SECONDS=0
+			rm -f $T
+		fi
+		if [ "$DISTMETHOD" == "--eddycorrect" -a -f "$DWIEDDYCORRECTED/${SUBJECTID}.mat" ]
+		then
+			P=`pwd`
+			TEMPIN=`tmpnam $P/`
+			rm -fr $TEMPIN
+			mkdir -p $TEMPIN
+
+# warp the original DWI images to T1 space using concatenated DWI -> B0 -> T1 affine transforms + ANTS warp
+# make rotated gradient files
+#	dwi_ants_raw_reg.grad which is the rotated B vectors to T1 space with reorientation of DWI -> B0
+#	dwi_eddy_reorient.grad which is the rotated B vectors DWI -> B0
+
+			fslsplit $DWIREORIENT/${SUBJECTID} $TEMPIN/tmp
+			# split the transform file for each image
+			# it is a collection of transforms with a one-line description of the file, so the transforms are in chunks of 5 lines
+			split -l 5 --numeric-suffixes=0 --additional-suffix=.mat $DWIEDDYCORRECTED/${SUBJECTID}.mat $TEMPIN/tmp00
+			split -l 1 --numeric-suffixes=0 --additional-suffix=.grad $RAWDWI/${SUBJECTID}.grad $TEMPIN/tmp00
+			
+			for i in `imglob $TEMPIN/tmp*`
+			do
+				tail -n 4 ${i}.mat > ${i}_tmp.mat
+				mv ${i}_tmp.mat ${i}.mat
+				
+				convert_xfm -omat ${i}_to_struct.mat -concat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat ${i}.mat
+				
+				c3d_affine_tool -ref $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz -src ${i}.nii.gz ${i}_to_struct.mat -fsl2ras -oitk ${i}_itk.txt
+				
+				DWIRotateGradWithFLIRT ${i}.grad ${i}_to_struct.mat ${i}_to_struct.grad
+				DWIRotateGradWithFLIRT ${i}.grad ${i}.mat ${i}_to_bzero.grad
+#ITKTransformTools compose ${i}_itk.txt $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt ${i}_composed.txt
+#ITKTransformTools print $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt
+#ITKTransformTools print ${i}_composed.txt
+#CompositeTransformUtil --assemble ${i}_composed.mat ${i}_itk.mat $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt
+#WarpImageMultiTransform 3 ${i}.nii.gz ${i}_reg.nii.gz -R $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz ${i}_itk.txt
+#fslmaths ${i}_reg ${i}_reg -odt $FINALREGDATATYPE
+				
+				antsApplyTransforms --float -v -e 0 -i ${i}.nii.gz -r $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz -o ${i}_reg.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz -t ${i}_itk.txt 
+
+			done
+			cat $TEMPIN/*_to_struct.grad > $DWIREGTOSTRUCT/${SUBJECTID}/dwi_ants_raw_reg.grad
+			cat $TEMPIN/*_to_bzero.grad > $DWIREGTOSTRUCT/${SUBJECTID}/dwi_eddy_reorient.grad
+			fslmerge -a $DWIREGTOSTRUCT/${SUBJECTID}/dwi_ants_raw_reg $TEMPIN/*_reg*.nii.gz
+#	rm -f $TEMPIN/*_reg*.nii.gz
+#rm -fr $TEMPIN
+#fslmaths $DWIREGTOSTRUCT/${SUBJECTID}/dwi_ants_raw_reg $DWIREGTOSTRUCT/${SUBJECTID}/dwi_ants_raw_reg -odt int
+			# warp the DWI images linearly using the two interpolations, so in other words apply the flirt transformation to the eddy corrected volume
+			rm -fr $TEMPIN
+			mkdir -p $TEMPIN
+
+#		Finally just do the linear portion of the registration, concatenated linear transforms
+#echo $TEMPIN
+			fslsplit $DWIREORIENT/${SUBJECTID} $TEMPIN/tmp
+			
+			# split the transform file for each image
+			# it is a collection of transforms with a one-line description of the file, so the transforms are in chunks of 5 lines
+			split -l 5 --numeric-suffixes=0 --additional-suffix=.mat $DWIEDDYCORRECTED/${SUBJECTID}.mat $TEMPIN/tmp00
+
+			for i in `imglob $TEMPIN/tmp*.nii.gz`
+			do
+				tail -n 4 ${i}.mat > ${i}_tmp.mat
+				mv ${i}_tmp.mat ${i}.mat
+				
+				convert_xfm -omat ${i}_to_struct.mat -concat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat ${i}.mat
+				
+				flirt -in $i -ref $T1SKULLSTRIPPED/${SUBJECTID} -out ${i}_reg -applyxfm -init ${i}_to_struct.mat -datatype $FINALREGDATATYPE
+			done
+			fslmerge -a $DWIREGTOSTRUCT/${SUBJECTID}/dwi_linear_raw_reg $TEMPIN/*_reg*.nii.gz
+			rm -fr $TEMPIN
+		fi
+#	;;
+#--blipud)
+#	if [ "x`imglob $DWIBLIPUDCORRECTED/${SUBJECTID}`" = "x" ]
+#	then
+#		echo "BlipUD corrected file $DWIBLIPUDCORRECTED/${SUBJECTID} doesnt exist, run --dwi-distortion-correct --dwi-use-blipud"
+#		exit 1;
+#	fi
+#	echo "blipud"
+#	;;
+#esac
+	imrm $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted
+fi

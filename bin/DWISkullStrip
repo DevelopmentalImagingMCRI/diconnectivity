@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# performs skull stripping on the T1 and B0 images
+
+. `which DIConnEnv.sh`
+
+if [ -z "$1" ]
+then
+	echo "Usage: $0 <subject id>"
+else
+		
+# do the B0 image
+	if [ "x`imglob $DWIBZERO/${1}`" = "x" ]
+	then
+		echo "BZero image not found $DWIBZERO/${1}, run --dwi-savebzero"
+		exit 1
+	fi
+
+	mkdir -p $DWISKULLSTRIPPED
+
+	bet $DWIBZERO/${1} $DWISKULLSTRIPPED/${1} -f 0.2 -m
+fi
