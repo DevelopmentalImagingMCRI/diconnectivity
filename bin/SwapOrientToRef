@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+import numpy
+import nibabel
+import os
+import sys
+
+# apply an orientation transformation according to the ornt
+# ornt is a [3, 2] array
+# the format is
+# [newx, flipx] 
+# [newy, flipy] 
+# [newz, flipz] 
+# each row, the index is the new column
+def applyOrntToNIIAffine(NII, ornt_transform):
+	NIIAffine = NII.get_affine()
+	
+	# use fsl's method for 
+	# make a transformation affine matrix
+	transformAffine = numpy.zeros_like(NIIAffine)
+	transformAffine[3, 3] = 1
+
+	for curDim in range(3):
+		newDim = int(ornt_transform[curDim, 0])
+		transformAffine[curDim, newDim] = ornt_transform[curDim, 1]
+		#print str(curDim) + " " + str(newDim)
+		if ornt_transform[curDim, 1] < 0:
+			transformAffine[curDim, 3] = (NII.shape[newDim] - 1) * NII.header.get_zooms()[newDim]
+
+	pixDimsVector = numpy.concatenate((numpy.array(NII.header.get_zooms()), [1]))
+
+	return numpy.matrix(NIIAffine) * numpy.diag(1.0 / pixDimsVector) * numpy.matrix(transformAffine) * numpy.diag(pixDimsVector)
+	
+def usage():
+	print sys.argv[0] + " <input nii> <reference nii> <output nii>"
+	print
+	print "Swaps the axes of the input nii to match reference nii, writes to output nii"
+
+if len(sys.argv) < 4:
+	usage()
+	quit()
+
+inputNIIFile = sys.argv[1]
+refNIIFile = sys.argv[2]
+outputNIIFile = sys.argv[3]
+
+if not os.path.isfile(inputNIIFile):
+	print "Input file not found"
+	quit()
+
+if not os.path.isfile(refNIIFile):
+	print "Reference file not found"
+	quit()
+
+inputNII = nibabel.load(inputNIIFile)
+refNII = nibabel.load(refNIIFile)
+
+inputAXCodes = nibabel.aff2axcodes(inputNII.get_affine())
+inputOrnt = nibabel.orientations.axcodes2ornt(inputAXCodes)
+
+refAXCodes = nibabel.aff2axcodes(refNII.get_affine())
+refOrnt = nibabel.orientations.axcodes2ornt(refAXCodes)
+
+inputToRefTransformOrnt = nibabel.orientations.ornt_transform(inputOrnt, refOrnt)
+
+outputIMG = nibabel.orientations.apply_orientation(inputNII.get_data(), inputToRefTransformOrnt)
+outputAffine = applyOrntToNIIAffine(inputNII, inputToRefTransformOrnt)
+
+outputNII = nibabel.Nifti1Image(outputIMG, outputAffine)
+nibabel.save(outputNII, outputNIIFile)
+
