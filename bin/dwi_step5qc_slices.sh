@@ -18,8 +18,8 @@ else
 		for i in `cat $SUBJECTLIST`
 		do
 			echo $i
-			slices_output $DWIREGTOSTRUCTQC/${i}_linear.png $T1NECKCROPPED/$i $DWIREGTOSTRUCT/$i/bzero_brain_linear_reg
-			slices_output $DWIREGTOSTRUCTQC/${i}_nonlinear.png $T1NECKCROPPED/$i $DWIREGTOSTRUCT/$i/bzero_brain_ants_reg
+			slices_output $DWIREGTOSTRUCTQC/${i}_linear.png $T1BIASCORRECTED/$i $DWIREGTOSTRUCT/$i/bzero_brain_linear_reg
+			slices_output $DWIREGTOSTRUCTQC/${i}_nonlinear.png $T1BIASCORRECTED/$i $DWIREGTOSTRUCT/$i/bzero_brain_ants_reg
 		done
 	fi
 fi	
