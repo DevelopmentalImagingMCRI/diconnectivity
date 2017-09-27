@@ -45,12 +45,12 @@ else
 # perform a FLIRT, affine registration of the BZero brain to structural_brain_inverted
 # save the registered image as bzero_brain_linear_reg
 		FLIRTDEGREES=15
-		flirt -in $DWISKULLSTRIPPED/${SUBJECTID} -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi -out $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX} -omat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat -cost mutualinfo -searchrx -$FLIRTDEGREES $FLIRTDEGREES -searchry -$FLIRTDEGREES $FLIRTDEGREES -searchrz -$FLIRTDEGREES $FLIRTDEGREES -usesqform
+		flirt -in $DWISKULLSTRIPPED/${SUBJECTID} -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi -out $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi -omat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat -cost mutualinfo -searchrx -$FLIRTDEGREES $FLIRTDEGREES -searchry -$FLIRTDEGREES $FLIRTDEGREES -searchrz -$FLIRTDEGREES $FLIRTDEGREES -usesqform
 # check	the scaling parameters of the output transform, if the scaling in any dimension is out of the range 0.95 - 1.05 then redo the registration without -usesqform
 
-		XSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat | grep "^Scales" | cut -f2 -d= | awk '{print $1}'`
-		YSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat | grep "^Scales" | cut -f2 -d= | awk '{print $2}'`
-		ZSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat | grep "^Scales" | cut -f2 -d= | awk '{print $3}'`
+		XSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat | grep "^Scales" | cut -f2 -d= | awk '{print $1}'`
+		YSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat | grep "^Scales" | cut -f2 -d= | awk '{print $2}'`
+		ZSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat | grep "^Scales" | cut -f2 -d= | awk '{print $3}'`
 		
 #echo $XSCALE $YSCALE $ZSCALE
 #echo `echo "$XSCALE > 1.05" | bc`
@@ -67,13 +67,13 @@ else
 			"`echo "$ZSCALE > $UTHRESH" | bc`" == "1" ]
 		then
 			echo "initial flirt transformation corrupted, redoing without -usesqform"
-			flirt -in $DWISKULLSTRIPPED/${SUBJECTID} -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi -out $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX} -omat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat -cost mutualinfo -searchrx -$FLIRTDEGREES $FLIRTDEGREES -searchry -$FLIRTDEGREES $FLIRTDEGREES -searchrz -$FLIRTDEGREES $FLIRTDEGREES
+			flirt -in $DWISKULLSTRIPPED/${SUBJECTID} -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi -out $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi -omat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat -cost mutualinfo -searchrx -$FLIRTDEGREES $FLIRTDEGREES -searchry -$FLIRTDEGREES $FLIRTDEGREES -searchrz -$FLIRTDEGREES $FLIRTDEGREES
 		fi
 # transform the FLIRT transformation into ITK format, needed for ANTS
-		c3d_affine_tool -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi.nii.gz -src $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat -fsl2ras -oitk $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_itk.mat
+		c3d_affine_tool -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi.nii.gz -src $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat -fsl2ras -oitk $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi_itk.mat
 
 # run ANTS with the FLIRT transformation as the initialiser, do not perform affine registration with ANTS
-		ANTS 3 -m CC[$DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi.nii.gz,$DWISKULLSTRIPPED/${SUBJECTID}.nii.gz,1,4] -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init.nii.gz --use-Histogram-Matching -i 100x50x25 -r Gauss[0.5] -t SyN[0.5] --continue-affine false --initial-affine $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_itk.mat
+		ANTS 3 -m CC[$DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi.nii.gz,$DWISKULLSTRIPPED/${SUBJECTID}.nii.gz,1,4] -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init.nii.gz --use-Histogram-Matching -i 100x50x25 -r Gauss[0.5] -t SyN[0.5] --continue-affine false --initial-affine $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi_itk.mat
 		
 #antsRegistration -d 3 --initial-moving-transform $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_itk.mat -m CC[$DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz,$DWISKULLSTRIPPED/${SUBJECTID}.nii.gz,1,4,Random,0.5] --use-histogram-matching -o [$DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init_antsRegistration.nii.gz,$DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init_antsRegistrationDeformed.nii.gz] -c 100x50x25 -t SyN[0.5] -v --shrink-factors 4x2x1 --smoothing-sigmas 4x2x1vox --float
 #exit;
@@ -81,11 +81,14 @@ else
 		antsApplyTransforms --float -v -e 0 -i $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -r $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwi.nii.gz -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwi.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt 
 		
 		SwapOrientToRef $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwi.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg.nii.gz
-
+		SwapOrientToRef $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwi.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.nii.gz
+		
+		fslcpgeom $T1BIASCORRECTED/${SUBJECTID} $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg
+		fslcpgeom $T1BIASCORRECTED/${SUBJECTID} $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg
 #WarpImageMultiTransform 3 $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_reg_itk_ants.nii.gz -R $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt
 
 # rotate the b-matrix using the FLIRT transformation
-		DWIRotateGradWithFLIRT $RAWDWI/${SUBJECTID}.grad $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}.mat $DWIREGTOSTRUCT/${SUBJECTID}/linear_reg_no_eddy_reorient.grad
+		DWIRotateGradWithFLIRT $RAWDWI/${SUBJECTID}.grad $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat $DWIREGTOSTRUCT/${SUBJECTID}/linear_reg_no_eddy_reorient.grad
 #c3d_affine_tool -ref $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz -src $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -ras2fsl -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.mat
 #SECONDS=0
 		FINALREGDATATYPE="short"
