@@ -81,8 +81,8 @@ else:
 		ind = IMGData.argsort()
 		IMGData = IMGData[ind]
 
-		SecondPercentile = IMGData[numpy.floor(IMGData.size * 0.02)]
-		NinetyEightPercentile = IMGData[numpy.floor(IMGData.size * 0.98)]
+		SecondPercentile = IMGData[int(numpy.floor(IMGData.size * 0.02))]
+		NinetyEightPercentile = IMGData[int(numpy.floor(IMGData.size * 0.98))]
 		IMGData[IMGData < SecondPercentile] = SecondPercentile
 		IMGData[IMGData > NinetyEightPercentile] = NinetyEightPercentile
 		
