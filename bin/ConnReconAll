@@ -280,6 +280,7 @@ def main():
 #	dwi-reorient # no options
 #	dwi-skullstrip # no options, BET is fine
 #	dwi-distortioncorrect: Options to choose whether blip-up blip-down (topup, eddy) or eddy_correct are used for the distortion coorection
+	longOptStrings.extend(["dwi-use-eddy"])
 	longOptStrings.extend(["dwi-use-eddycorrect", "dwi-use-blipud"])
 #	dwi-mrtrixpreprocess
 	longOptStrings.extend(["mrtrix-mrtrix2", "mrtrix-mrtrix3", "mrtrix-csd-lmax=", "mrtrix-dwispace-nobrotation", "mrtrix-dwispace-brotation", "mrtrix-structspace-brotation", "mrtrix-dwispace-nobrotation", "mrtrix-structspace-nobrotation"])
@@ -311,6 +312,7 @@ def main():
 	extraFreesurferOptions = None
 	
 	DWIDistortionCorrectMethod = '--eddycorrect'
+	DWIUseEddy = False
 
 	MrtrixVersionToUse = 2
 	MrtrixCSDLMAX = None
@@ -351,6 +353,9 @@ def main():
 			structFreesurferUseBiasCorrected = True
 		if o == '--struct-freesurfer-use-nobiascorrected':
 			structFreesurferUseBiasCorrected = False
+		if o == '--dwi-use-eddy':
+			DWIUseEddy = True
+		
 		if o == '--dwi-use-eddycorrect':
 			DWIDistortionCorrectMethod = '--eddycorrect'
 		if o == '--dwi-use-blipud':
@@ -476,6 +481,8 @@ def main():
 	
 	if doProcessingSteps['dwi-savebzero']:
 		cmd = ["DWISaveBZero", subjectID]
+		if DWIUseEddy == True:
+			cmd.append('--use-eddy')
 		runCommand(cmd)
 		pass
 
@@ -501,32 +508,37 @@ def main():
 	#"\t\t\t--mrtrix-no-nobrotation: do not create outputs that do not have rotated b-vectors", \
 	#"", \
 
-		MrtrixCommand = 'DWIMrtrixPreprocessMrtrix' + str(MrtrixVersionToUse)
-
-		if MrtrixDWISpaceNoBRotation == True:
-			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'DWISpaceNoBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
-			if MrtrixCSDLMAX != None:
-				cmd.append(MrtrixCSDLMAX)
-			runCommand(cmd)
 		
-		if MrtrixDWISpaceBRotation == True:
-			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'DWISpaceBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIEddyCorrected', subjectID + '.grad')]
-			if MrtrixCSDLMAX != None:
-				cmd.append(MrtrixCSDLMAX)
-			runCommand(cmd)
+		if DWIUseEddy == True:
+			MrtrixCommand = 'DWIMrtrixPreprocessMrtrixEddy'
+			cmd = [MrtrixCommand, subjectID, 'mrtrixEddy', os.path.join('DWIEddy', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIEddy', subjectID + ".eddy_rotated_bvecs"), os.path.join('RawDWI', subjectID + ".bval")]
+			subprocess.call(cmd)
+		else:
+			MrtrixCommand = 'DWIMrtrixPreprocessMrtrix' + str(MrtrixVersionToUse)
+			if MrtrixDWISpaceNoBRotation == True:
+				cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'DWISpaceNoBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+				if MrtrixCSDLMAX != None:
+					cmd.append(MrtrixCSDLMAX)
+				runCommand(cmd)
+			
+			if MrtrixDWISpaceBRotation == True:
+				cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'DWISpaceBReorient', os.path.join('DWIEddyCorrected', subjectID + '.nii.gz'), os.path.join('DWISkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIEddyCorrected', subjectID + '.grad')]
+				if MrtrixCSDLMAX != None:
+					cmd.append(MrtrixCSDLMAX)
+				runCommand(cmd)
 
-		if MrtrixT1SpaceNoBRotation == True:
-			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'StructSpaceNoBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
-			if MrtrixCSDLMAX != None:
-				cmd.append(MrtrixCSDLMAX)
-			runCommand(cmd)
+			if MrtrixT1SpaceNoBRotation == True:
+				cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'StructSpaceNoBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('RawDWI', subjectID + ".grad")]
+				if MrtrixCSDLMAX != None:
+					cmd.append(MrtrixCSDLMAX)
+				runCommand(cmd)
 
 #		if MrtrixNoStructSpace == False and MrtrixNoNoBRotation == False:
-		if MrtrixT1SpaceNoBRotation == True:
-			cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'StructSpaceBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.grad')]
-			if MrtrixCSDLMAX != None:
-				cmd.append(MrtrixCSDLMAX)
-			runCommand(cmd)
+			if MrtrixT1SpaceNoBRotation == True:
+				cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'StructSpaceBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.grad')]
+				if MrtrixCSDLMAX != None:
+					cmd.append(MrtrixCSDLMAX)
+				runCommand(cmd)
 #		
 #		#cmd = [MrtrixCommand, subjectID, 'mrtrix' + str(MrtrixVersionToUse) + 'T1SpaceNoEddyBReorient', os.path.join('DWIRegToStruct', subjectID, 'dwi_ants_raw_reg.nii.gz'), os.path.join('T1SkullStripped', subjectID + "_mask.nii.gz"), os.path.join('DWIRegToStruct', subjectID, 'linear_reg_no_eddy_reorient.grad')]
 #		#runCommand(cmd)
