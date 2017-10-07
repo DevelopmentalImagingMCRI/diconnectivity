@@ -4,10 +4,10 @@ import os
 import re
 
 def freesurferCortexLabels():
-	schemeDir = '../lib/parc_schemes'
-	#schemeDir = '/home/addo/connectivity/trunk/dfbiconnectivity/lib/parc_schemes'
-	schemeDir = '/usr/local/diconnectivity/lib/parc_schemes'
-	#schemeDir = '/home/addo/ownCloud/diconnectivity/lib/parc_schemes'
+	scriptPath = os.path.realpath(__file__)
+	(scriptDir, tail) = os.path.split(scriptPath)
+
+	schemeDir = os.path.join(scriptDir, '..', 'lib', 'parc_schemes')
 
 	if os.path.isdir(schemeDir):
 		#print "Scheme dir: " + schemeDir
@@ -61,6 +61,7 @@ def freesurferCortexLabels():
 
 		return CortexLabels
 	else:
+		print 'Scheme dir not found, using defaults'
 		return freesurferCortexLabelsOld()
 
 def freesurferCortexLabelsOld():
