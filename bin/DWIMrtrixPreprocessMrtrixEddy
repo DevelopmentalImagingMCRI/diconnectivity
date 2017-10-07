@@ -5,32 +5,36 @@
 # 31/08/2011 changed to NIFTI format
 # 29/03/2012 changed to NIFTI GZIP format
 
-if [ "$#" -lt "5" ]
+
+if [ "$#" -lt "6" ]
 then
-	echo "Usage: $0 <subject id> <output dir> <DWI image> <brain mask> <gradient table> [spherical harmonic order]";
+	echo "Usage: $0 <subject id> <output dir> <DWI image> <brain mask> <bvec file> <bval file> [spherical harmonic order]";
 	exit;
 else
 	SUBJECTID=$1
 	OUTPUTROOT=$2
 	INPUTDWIIMAGE=$3
 	BRAINMASK=$4
-	GRADIENTTABLE=$5
+	BVECFILE=$5
+	BVALFILE=$6
 
 	rm -fr $OUTPUTROOT/$SUBJECTID
 	mkdir -p $OUTPUTROOT/$SUBJECTID
 
-	cp $GRADIENTTABLE $OUTPUTROOT/$SUBJECTID/grad.b
+#cp $GRADIENTTABLE $OUTPUTROOT/$SUBJECTID/grad.b
+	cp $BVALFILE $OUTPUTROOT/$SUBJECTID/dwi.bval
+	cp $BVECFILE $OUTPUTROOT/$SUBJECTID/dwi.bvec
 	
-	if [ -z "$6" ]
+	if [ -z "$7" ]
 	then
-		LMAX=`DWIMrtrixMaxLMAXForGrad $OUTPUTROOT/$SUBJECTID/grad.b`
+		LMAX=`DWIMrtrixMaxLMAXForFSLGrad $OUTPUTROOT/$SUBJECTID/dwi.bval`
 		echo "Automatic LMAX: $LMAX"
 	else
-		LMAX=$6
+		LMAX=$7
 		echo "Manual LMAX: $LMAX"
 	fi
 
-	ln -sf `pwd`/$INPUTDWIIMAGE $OUTPUTROOT/$SUBJECTID/dwi.nii.gz
+	ln -sf ../../$INPUTDWIIMAGE $OUTPUTROOT/$SUBJECTID/dwi.nii.gz
 #LMAX=8
 # change to just NIFTI format
 
@@ -49,11 +53,10 @@ else
 	else
 		mrconvert dwi.nii.gz -coord 3 0 - | $MRTRIX3BINDIR/threshold - - | $MRTRIX3BINDIR/median3D - - | $MRTRIX3BINDIR/median3D - mask.nii.gz
 	fi
-
-	dwi2tensor -grad grad.b -mask mask.nii.gz dwi.nii.gz tensor.nii.gz
+	dwi2tensor -fslgrad dwi.bvec dwi.bval -mask mask.nii.gz dwi.nii.gz tensor.nii.gz
 	tensor2metric -mask mask.nii.gz -fa fa.nii.gz -vector ev.nii.gz tensor.nii.gz
 #dwi2response -nthreads `nproc` -grad grad.b -mask mask.nii.gz dwi.nii.gz response.txt 
-	dwi2response tournier -grad grad.b -mask mask.nii.gz dwi.nii.gz response.txt 
+	dwi2response tournier -fslgrad dwi.bvec dwi.bval -mask mask.nii.gz dwi.nii.gz response.txt 
 
 	RESPONSEX=`awk '{print $1;}' response.txt`
 	RESPONSEY=`awk '{print $2;}' response.txt`
@@ -61,7 +64,7 @@ else
 	
 	if [ "$RESPONSEX" != "nan" ] && [ "$RESPONSEY" != "nan" ] && [ "$RESPONSEZ" != "nan" ]
 	then
-		dwi2fod csd -nthreads `nproc` -grad grad.b -lmax $LMAX -mask mask.nii.gz dwi.nii.gz response.txt CSD.nii.gz
+		dwi2fod csd -nthreads `nproc` -fslgrad dwi.bvec dwi.bval -lmax $LMAX -mask mask.nii.gz dwi.nii.gz response.txt CSD.nii.gz
 	else
 		echo "response.txt has NaN values, not executing csdeconv"
 	fi

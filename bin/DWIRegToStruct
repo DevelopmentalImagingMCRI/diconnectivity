@@ -48,9 +48,9 @@ else
 		flirt -in $DWISKULLSTRIPPED/${SUBJECTID} -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient -out $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient -omat $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient.mat -cost mutualinfo -searchrx -$FLIRTDEGREES $FLIRTDEGREES -searchry -$FLIRTDEGREES $FLIRTDEGREES -searchrz -$FLIRTDEGREES $FLIRTDEGREES -usesqform
 # check	the scaling parameters of the output transform, if the scaling in any dimension is out of the range 0.95 - 1.05 then redo the registration without -usesqform
 
-		XSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat | grep "^Scales" | cut -f2 -d= | awk '{print $1}'`
-		YSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat | grep "^Scales" | cut -f2 -d= | awk '{print $2}'`
-		ZSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwi.mat | grep "^Scales" | cut -f2 -d= | awk '{print $3}'`
+		XSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient.mat | grep "^Scales" | cut -f2 -d= | awk '{print $1}'`
+		YSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient.mat | grep "^Scales" | cut -f2 -d= | awk '{print $2}'`
+		ZSCALE=`avscale $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient.mat | grep "^Scales" | cut -f2 -d= | awk '{print $3}'`
 		
 #echo $XSCALE $YSCALE $ZSCALE
 #echo `echo "$XSCALE > 1.05" | bc`
