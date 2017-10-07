@@ -196,8 +196,8 @@ def usage():
 	"", \
 	"\t--dwi-mrtrixpreprocess: performs tensor estimation and CSD with mrtrix in DWI and T1 space, depends --dwi-distortioncorrect", \
 	"\t\tOPTIONS:", \
-	"\t\t\t--mrtrix-mrtrix2: use mrtrix 0.2.12 (default)", \
-	"\t\t\t--mrtrix-mrtrix3: use mrtrix3 git", \
+	"\t\t\t--mrtrix-mrtrix2: use mrtrix 0.2.12", \
+	"\t\t\t--mrtrix-mrtrix3: use mrtrix3 git (default)", \
 	"\t\t\t--mrtrix-csd-lmax=<>: the maximum harmonic order to use for CSD, automatically determined if not given", \
 	"\t\tOUTPUT OPTIONS:", \
 	"\t\t\t--mrtrix-dwispace-nobrotation: perform CSD estimation in DWI space without B-vector rotation from movement correction (enabled by default)", \
@@ -314,7 +314,7 @@ def main():
 	DWIDistortionCorrectMethod = '--eddycorrect'
 	DWIUseEddy = False
 
-	MrtrixVersionToUse = 2
+	MrtrixVersionToUse = 3
 	MrtrixCSDLMAX = None
 	MrtrixDWISpaceNoBRotation = True
 	MrtrixDWISpaceBRotation = False

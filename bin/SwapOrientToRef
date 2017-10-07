@@ -5,6 +5,8 @@ import nibabel
 import os
 import sys
 
+import getopt
+
 # apply an orientation transformation according to the ornt
 # ornt is a [3, 2] array
 # the format is
@@ -32,17 +34,30 @@ def applyOrntToNIIAffine(NII, ornt_transform):
 	return numpy.matrix(NIIAffine) * numpy.diag(1.0 / pixDimsVector) * numpy.matrix(transformAffine) * numpy.diag(pixDimsVector)
 	
 def usage():
-	print sys.argv[0] + " <input nii> <reference nii> <output nii>"
+	print sys.argv[0] + " [--use-ref-geom] <input nii> <reference nii> <output nii>"
 	print
 	print "Swaps the axes of the input nii to match reference nii, writes to output nii"
+	print "--use-ref-geom copies the geometry of the reference to the output"
 
-if len(sys.argv) < 4:
+
+opts, args = getopt.getopt(sys.argv[1:], "h", ['use-ref-geom'])
+
+if len(args) < 3:
 	usage()
 	quit()
 
-inputNIIFile = sys.argv[1]
-refNIIFile = sys.argv[2]
-outputNIIFile = sys.argv[3]
+inputNIIFile = args[0]
+refNIIFile = args[1]
+outputNIIFile = args[2]
+
+useRefGeom = False
+
+for o, a in opts:
+		if o == '-h':
+			usage()
+			quit()
+		if o == '--use-ref-geom':
+			useRefGeom = True
 
 if not os.path.isfile(inputNIIFile):
 	print "Input file not found"
@@ -64,7 +79,11 @@ refOrnt = nibabel.orientations.axcodes2ornt(refAXCodes)
 inputToRefTransformOrnt = nibabel.orientations.ornt_transform(inputOrnt, refOrnt)
 
 outputIMG = nibabel.orientations.apply_orientation(inputNII.get_data(), inputToRefTransformOrnt)
-outputAffine = applyOrntToNIIAffine(inputNII, inputToRefTransformOrnt)
+
+if useRefGeom:
+	outputAffine = refNII.get_affine()
+else:
+	outputAffine = applyOrntToNIIAffine(inputNII, inputToRefTransformOrnt)
 
 outputNII = nibabel.Nifti1Image(outputIMG, outputAffine)
 nibabel.save(outputNII, outputNIIFile)

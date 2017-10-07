@@ -2,7 +2,7 @@
 
 . `which DIConnEnv.sh`
 
-export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=8
+export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
 if [ -z "$1"  -o -z "$2" ]
 then
 	echo "Usage: $0 <subject id> <--dwi-use-blipud or --dwi-use-eddycorrect>"
@@ -35,7 +35,7 @@ else
 		
 # invert the contrast of the T1 structural to make it look like a T2 image, save as structural_brain_inverted
 # structural_brain_inverted = max(structural_brain) - structural_brain
-		MAXINTENSITY=`fslstats $T1BIASCORRECTED/${SUBJECTID} -R | cut -f2 -d \  `
+		MAXINTENSITY=`fslstats ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain -R | cut -f2 -d \  `
 #fslmaths $T1SKULLSTRIPPED/${SUBJECTID} -mul -1 -add $MAXINTENSITY -mas $T1SKULLSTRIPPED/${SUBJECTID}_mask $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted
 		fslmaths ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain -mul -1 -add $MAXINTENSITY -mas ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionMask $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted
 		
@@ -80,15 +80,15 @@ else
 # apply the nonlinear ANTS transform to the bzero image to put it into T1 space, 
 		antsApplyTransforms --float -v -e 0 -i $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -r $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt 
 		
-		SwapOrientToRef $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg.nii.gz
-		SwapOrientToRef $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.nii.gz
+		SwapOrientToRef --use-ref-geom $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg.nii.gz
+		SwapOrientToRef --use-ref-geom $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.nii.gz
 		
-		fslcpgeom ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg
-		fslcpgeom ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg
+#	fslcpgeom ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg
+#		fslcpgeom ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg
 #WarpImageMultiTransform 3 $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_reg_itk_ants.nii.gz -R $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt
 
 # rotate the b-matrix using the FLIRT transformation
-		DWIRotateGradWithFLIRT $RAWDWI/${SUBJECTID}.grad $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient.mat $DWIREGTOSTRUCT/${SUBJECTID}/linear_reg_no_eddy_reorient.grad
+#DWIRotateGradWithFLIRT $RAWDWI/${SUBJECTID}.grad $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient.mat $DWIREGTOSTRUCT/${SUBJECTID}/linear_reg_no_eddy_reorient.grad
 #c3d_affine_tool -ref $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz -src $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -ras2fsl -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.mat
 #SECONDS=0
 		FINALREGDATATYPE="short"

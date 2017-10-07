@@ -38,7 +38,7 @@ FREESURFERBASELABELS=FreesurferBaseLabels
 
 MRTRIXDIR=mrtrix
 MRTRIX2BINDIR=/usr/local/mrtrix-0.2.12/bin
-MRTRIX3BINDIR=/usr/local/mrtrix3/release/bin
+MRTRIX3BINDIR=/usr/local/mrtrix3/git/bin
 
 CONNECTOMESEEDIMAGES=ConnectomeSeedImages
 
