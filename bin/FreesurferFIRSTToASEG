@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+
+import nibabel
+import os
+import sys
+
+import subprocess
+import numpy
+
+if len(sys.argv) != 2:
+	print "Usage: " + sys.argv[0] + " <subject id>"
+else:
+	subjectID = sys.argv[1]
+
+	FIRSTFileName = os.path.join('T1FIRST', subjectID + "_all_fast_firstseg.nii.gz")
+	FIRSTFSFileName = os.path.join('freesurfer', subjectID, 'mri', "all_fast_firstseg.mgz")
+	baseASEGFileName = os.path.join('freesurfer', subjectID, 'mri', 'aseg.mgz')
+
+	if not os.path.isfile(FIRSTFileName) or not os.path.isdir(os.path.join('freesurfer', subjectID)) or not os.path.isfile(baseASEGFileName):
+		print "Could not find first output or freesurfer directory"
+		quit()
+	
+	# reslice and convert first output to freesurfer space
+	cmd = ['mri_convert', '-rt', 'nearest', '-odt', 'short', '--no_scale', '1', '-rl', baseASEGFileName, FIRSTFileName, FIRSTFSFileName]
+	subprocess.call(cmd)
+
+	# load aseg and fsfirst
+	FIRSTFSMGZ = nibabel.load(FIRSTFSFileName)
+	FIRSTFSIMG = FIRSTFSMGZ.get_data()
+	LHLabels = {
+	10: 'Left-Thalamus-Proper',
+	11: 'Left-Caudate',
+	12: 'Left-Putamen',
+	13: 'Left-Pallidum',
+	17: 'Left-Hippocampus',
+	18: 'Left-Amygdala',
+	26: 'Left-Accumbens-area'}
+	
+	RHLabels = {
+	49: 'Right-Thalamus-Proper',
+	50: 'Right-Caudate',
+	51: 'Right-Putamen',
+	52: 'Right-Pallidum',
+	53: 'Right-Hippocampus',
+	54: 'Right-Amygdala',
+	58: 'Right-Accumbens-area'}
+	
+	brainstemLabel = 16
+	
+	ASEGImages = ['aseg', 'aparc+aseg', 'aparc.a2009s+aseg', 'aparc.DKTatlas+aseg']
+
+	for curASEGFileName in ASEGImages:
+
+		ASEGFileName = os.path.join('freesurfer', subjectID, 'mri', curASEGFileName + '.mgz')
+		ASEGMGZ = nibabel.load(ASEGFileName)
+		ASEGIMG = ASEGMGZ.get_data()
+		
+		outputIMG = numpy.array(ASEGIMG)
+		
+		# replace the labels in the existing ASEG with corresponding WM label
+		I = numpy.reshape(numpy.in1d(ASEGIMG.ravel(), LHLabels.keys()), ASEGIMG.shape)
+		outputIMG[I] = 2
+		
+		I = numpy.reshape(numpy.in1d(ASEGIMG.ravel(), RHLabels.keys()), ASEGIMG.shape)
+		outputIMG[I] = 41
+
+		outputIMG[ASEGIMG == brainstemLabel] = 0
+		
+		#outputMGZ = nibabel.MGHImage(outputIMG, ASEGMGZ.get_affine())
+		#nibabel.save(outputMGZ, os.path.join('freesurfer', subjectID, 'mri', 'aseg.nosubcort.mgz'))
+		
+		# replace with first labels
+		for curLabel in LHLabels.keys() + RHLabels.keys() + [brainstemLabel]:
+			outputIMG[FIRSTFSIMG == curLabel] = curLabel
+		
+		outputMGZ = nibabel.MGHImage(outputIMG, ASEGMGZ.get_affine())
+		nibabel.save(outputMGZ, os.path.join('freesurfer', subjectID, 'mri', curASEGFileName + '.first.mgz'))
+
