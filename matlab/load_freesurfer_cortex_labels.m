@@ -1,15 +1,22 @@
 function [CortexLabels] = load_freesurfer_cortex_labels(varargin)
 
-if nargin == 1
-	InputDir = varargin{1};
-else
-	InputDir = '/home/addo/connectivity/trunk/dfbiconnectivity/lib/parc_schemes';
-	InputDir = '/usr/local/diconnectivity/lib/parc_schemes';
-end
+% if nargin == 1
+% 	InputDir = varargin{1};
+% else
+% 	InputDir = '/home/addo/connectivity/trunk/dfbiconnectivity/lib/parc_schemes';
+% 	InputDir = '/usr/local/diconnectivity/lib/parc_schemes';
+% end
+
+ScriptFileName = mfilename('fullpath');
+
+[PATHSTR,~,~] = fileparts(ScriptFileName);
+
+InputDir = fullfile(PATHSTR, '..', 'lib', 'parc_schemes');
 
 if exist(InputDir, 'dir') ~= 7
 	error(['Input directory does not exist: ' InputDir]);
 end
+
 D = dir(InputDir);
 
 SchemeNameRemapSource{1} = 'APARC_ADS';
