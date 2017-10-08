@@ -150,12 +150,16 @@ WeightedA = zeros(NumRegions);
 LengthA = zeros(NumRegions);
 CountA = zeros(NumRegions);
 
+ScriptFileName = mfilename('fullpath');
+[PATHSTR, ~, ~] = fileparts(ScriptFileName);
+
 switch(MrtrixVersion)
 	case 2
-		MrtrixBinDir = [filesep fullfile('usr', 'local', 'diconnectivity', 'matlab', 'mrtrix-0.2.12-conn')];
+		MrtrixBinDir = fullfile(PATHSTR, 'mrtrix-0.2.12-conn');
 	case 3
 		MrtrixBinDir = [filesep fullfile('home', 'addo', 'dev', 'mrtrix3-conn', 'mrtrix3')];
 end
+
 
 BlockSize = 50000;
 
@@ -184,7 +188,7 @@ while(NumTracksSoFar < TotalNumTracks)
 						10);
 				case {'sd_stream', 'sd_prob', 'sd_runge2', 'sd_runge4'}
 					%CommandString = sprintf('LD_LIBRARY_PATH=/usr/local/mrtrix-0.2.9/lib; streamtrack %s %s %s -quiet -seed %s -exclude %s -include %s -mask %s -number %d -maxnum %d -step 1 -grad %s -curvature 4 -stop 2>/dev/null;', ...
-					CommandString = sprintf('LD_LIBRARY_PATH=%s; %s %s %s %s -quiet -seed %s -exclude %s -include %s -mask %s -number %d -maxnum %d -step %f -grad %s -stop -minlength %f -cutoff 0.05', ...
+					CommandString = sprintf('LD_LIBRARY_PATH=%s; %s %s %s %s -quiet -seed %s -exclude %s -include %s -mask %s -number %d -maxnum %d -step %f -stop -minlength %f -cutoff 0.05', ...
 						fullfile(MrtrixBinDir, 'lib'), ...
 						fullfile(MrtrixBinDir, 'bin', 'streamtrack'), ...
 						upper(MrtrixMethod), ...
@@ -195,7 +199,6 @@ while(NumTracksSoFar < TotalNumTracks)
 						[IncludeFile '.nii.gz'], ...
 						fullfile(MrtrixSubjDir, Subject, 'mask.nii.gz'), NumTracks, NumTracks * 100, ...
 						MrtrixStep, ...
-						fullfile(MrtrixSubjDir, Subject, 'grad.b'), ...
 						10);
 					if(Curvature > 0)
 						CommandString = [CommandString ' -curvature ' num2str(Curvature)];
