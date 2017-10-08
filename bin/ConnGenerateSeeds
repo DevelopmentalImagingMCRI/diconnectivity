@@ -185,7 +185,6 @@ def main():
 		quit()
 	
 	CortexLabels = FreesurferCortexLabelsModule.freesurferCortexLabels()
-	
 	subjectID = sys.argv[1]
 	
 	schemesToDo = None
@@ -213,8 +212,11 @@ def main():
 		if exception.errno != errno.EEXIST:
 			raise
 	
+	DWISpaceSuffix = '_dwispace'
+
 	APARCFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg'))
-	APARCDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_dwi'))
+	APARCDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg' + DWISpaceSuffix))
+	APARCFIRSTDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg.first' + DWISpaceSuffix))
 	APARCLinearRegFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_linear_reg'))
 	#APARCFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg')
 	#APARCOHNINEFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc.a2009s+aseg')
@@ -260,11 +262,12 @@ def main():
 	#print CortexLabels
 	
 	
-	suffixes = ["_dwi", "_linear_reg"]
+	suffixes = [".first" + DWISpaceSuffix, DWISpaceSuffix]
 	
 	# do the basic WM mask
 
-	processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm_dwi.nii.gz'), binarise = True)
+	processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '.nii.gz'), binarise = True)
+	processFile(APARCFIRSTDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz'), binarise = True)
 
 	if schemesToDo != None:
 		realSchemesToDo = list()
@@ -286,13 +289,13 @@ def main():
 		curExcludeValues = numpy.setdiff1d(ExcludeValues, AllLabels) 
 		
 		# do T1 space
-		SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile']))
-		if SeedFileName == None:
-			print "Warning, seed file does not exist: " + os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile'])
-		else:
-			processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '.nii.gz'), binarise = False) 
-			processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '_mask.nii.gz'), binarise = True) 
-			processFile(SeedFileName, curExcludeValues, os.path.join(connectomeSeedsDir, subjectID, 'excludes_' + curScheme.lower() + '.nii.gz'), binarise = True) 
+		#SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile']))
+		#if SeedFileName == None:
+		#	print "Warning, seed file does not exist: " + os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile'])
+		#else:
+		#	processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '.nii.gz'), binarise = False) 
+		#	processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + '_mask.nii.gz'), binarise = True) 
+		#	processFile(SeedFileName, curExcludeValues, os.path.join(connectomeSeedsDir, subjectID, 'excludes_' + curScheme.lower() + '.nii.gz'), binarise = True) 
 
 		for curSuffix in suffixes:
 			SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile'] + curSuffix))
@@ -330,7 +333,7 @@ def main():
 #			raise
 #	
 #	APARCFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg'))
-#	APARCDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_dwi'))
+#	APARCDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg' + DWISpaceSuffix + ''))
 #	APARCLinearRegFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_linear_reg'))
 #
 #	#APARCFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg')
@@ -375,7 +378,7 @@ def main():
 #	#254 CC_Mid_Anterior
 #	#255 CC_Anterior
 #	#print CortexLabels
-#	suffixes = ["_dwi", "_linear_reg"]
+#	suffixes = ["' + DWISpaceSuffix + '", "_linear_reg"]
 #
 #	for curScheme in CortexLabels:
 #		AllLabels = numpy.array([])
@@ -407,15 +410,15 @@ def main():
 #
 #	# do DWI space
 #	if APARCDWIFile != None:
-#		processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm_dwi.nii.gz'), binarise = True)
+#		processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '.nii.gz'), binarise = True)
 #	else:
-#		print "warning: aparc+aseg_dwi file not found"
+#		print "warning: aparc+aseg' + DWISpaceSuffix + ' file not found"
 #	
 #	# do T1-distorted space
 #	if APARCLinearRegFile != None:
 #		processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm_linear_reg.nii.gz'), binarise = True)
 #	else:
-#		print "warning: aparc+aseg_dwi file not found"
+#		print "warning: aparc+aseg' + DWISpaceSuffix + ' file not found"
 #
 #
 
