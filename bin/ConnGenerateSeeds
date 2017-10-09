@@ -66,7 +66,16 @@ def setmember1d_nu(a1, a2):
 #11	Left-Caudate	lCAUD , #11 will be replaced with 2
 #12	Left-Putamen	lPUTA , #12 will be replaced with 3 and so on
 
-def extractLabels(IMG = None, Labels = None, binarise = False):
+# like IDX = in1d(A, B) but returns a location index rather than a logical
+# so IDX[I] = B[K] if A[I] is the K'th element in B, -1 otherwise
+
+def in1dLOC(A, B):
+	
+	ABConcat = numpy.concatenate((A, B))
+	ABConcatSortedIDX = numpy.argsort(ABConcat)
+
+@profile
+def extractLabels(inIMG = None, Labels = None, binarise = False):
 
 	#print Labels
 	#if isinstance(Labels, numpy.array):
@@ -87,9 +96,10 @@ def extractLabels(IMG = None, Labels = None, binarise = False):
 	if IDX[0].size == 0:
 		I = numpy.zeros(IMG.shape, dtype = numpy.uint8)
 	else:
+
 		INonZero = IMG[IDX]
-		INonZero = setmember1d_nu(INonZero, LabelsAll)
-		
+		#INonZero = setmember1d_nu(INonZero, LabelsAll)
+		ID = numpy.in1d(INonZero.ravel(), LabelsAll)
 		I = numpy.array(IMG)
 		I[IDX] = INonZero
 		del INonZero
