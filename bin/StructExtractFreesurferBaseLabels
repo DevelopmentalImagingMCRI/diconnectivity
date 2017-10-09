@@ -2,7 +2,6 @@
 
 . `which DIConnEnv.sh`
 
-
 H=`hostname`
 if [ "$H" == "addo-MS-7A15" ]
 then
