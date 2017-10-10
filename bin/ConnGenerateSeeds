@@ -71,60 +71,126 @@ def setmember1d_nu(a1, a2):
 
 def in1dLOC(A, B):
 	
-	ABConcat = numpy.concatenate((A, B))
+	# concatenate the vectors together
+	ABConcat = numpy.concatenate((B, A))
 	ABConcatSortedIDX = numpy.argsort(ABConcat)
+	
+	#print ABConcat
+	#print ABConcatSortedIDX
+	ABConcatSorted = ABConcat[ABConcatSortedIDX]
+	#print ABConcatSorted
 
-@profile
+	# the locations of the elements of B are those whose indices are less than or equal to B.size
+	BIDXInSorted = numpy.where(ABConcatSortedIDX < B.size)[0]
+	
+	#print BIDXInSorted
+	
+	# make a mask that is 1 for the locations of the B elements
+	BIDXInSortedMask = numpy.zeros_like(ABConcatSortedIDX)
+	BIDXInSortedMask[BIDXInSorted] = 1
+
+	# perform a cumulative sum so that BIDXInSortedCS[I] is the index we are looking for that element in B
+	
+	BIDXInSortedCS = numpy.cumsum(BIDXInSortedMask) - 1
+	#print BIDXInSortedMask
+	#print BIDXInSortedCS
+	#InvalidIDX = BIDXInSortedCS < 0
+
+	#BIDXInSortedCS[InvalidIDX] = 0
+	
+	# now check for equality between ABConcat BIDXInSortedCS
+	AIDXEqualToB = (ABConcatSorted == B[BIDXInSortedCS])
+
+	#print ABConcatSorted[AIDXInSortedMask]
+	#print B[BIDXInSortedCS]
+	#print AIDXEqualToB
+	
+	# initialise the output index array
+	outIDX = numpy.zeros(A.shape, dtype = numpy.int32)
+	outIDX.fill(-1)
+	
+	AIDXInSortedMask = (ABConcatSortedIDX >= B.size)
+	#print AIDXInSortedMask	
+	# 
+	
+	AEqualToBIDX = numpy.where(numpy.logical_and(AIDXEqualToB, AIDXInSortedMask))[0]
+	
+	# put the found indices in the original locations
+	outIDX[ABConcatSortedIDX[AEqualToBIDX] - B.size] = BIDXInSortedCS[AEqualToBIDX]
+	
+	return outIDX
+
+#profile
 def extractLabels(inIMG = None, Labels = None, binarise = False):
 
 	#print Labels
 	#if isinstance(Labels, numpy.array):
 	#	for i in range(Label.size):
 	#		Remap[Labels[i]] = i + 1
-	Remap = dict()
-	LabelsAll = numpy.array([])
+#	Remap = dict()
+#	LabelsAll = numpy.array([])
+#	
+#	if isinstance(Labels, list):
+#		for i in range(len(Labels)):
+#			for j in range(len(Labels[i])):
+#				Remap[Labels[i][j]] = i + 1
+#				LabelsAll = numpy.append(LabelsAll, Labels[i][j])
+#	elif isinstance(Labels, numpy.ndarray):
+#		LabelsAll = numpy.array(Labels)
+#		for i in range(Labels.size):
+#			Remap[Labels[i]] = i + 1
+	
+	Remap = list()
+	LabelsAll = list()
+	
 	if isinstance(Labels, list):
 		for i in range(len(Labels)):
 			for j in range(len(Labels[i])):
-				Remap[Labels[i][j]] = i + 1
-				LabelsAll = numpy.append(LabelsAll, Labels[i][j])
+				Remap.append(i + 1)
+				LabelsAll.append(Labels[i][j])
+		LabelsAll = numpy.array(LabelsAll)
+		Remap = numpy.array(Remap)
 	elif isinstance(Labels, numpy.ndarray):
 		LabelsAll = numpy.array(Labels)
-		for i in range(Labels.size):
-			Remap[Labels[i]] = i + 1
-	IDX = IMG.nonzero()
-	if IDX[0].size == 0:
-		I = numpy.zeros(IMG.shape, dtype = numpy.uint8)
+		Remap = numpy.arange(1, Labels.size + 1)
+	print numpy.stack((LabelsAll, Remap))
+	if numpy.all(inIMG == 0):
+		outIMG = numpy.zeros(inIMG.shape, dtype = numpy.uint8)
 	else:
+		
+		# make sure LabelsAll is sorted
+		I = numpy.argsort(LabelsAll)
+		LabelsAll = LabelsAll[I]
+		Remap = Remap[I]
+		del I
 
-		INonZero = IMG[IDX]
+		BIDX = in1dLOC(inIMG.ravel(), LabelsAll)
+		
+		outIMG = numpy.zeros(inIMG.shape, dtype = numpy.uint8)
+		
+		BIDX = numpy.reshape(BIDX, inIMG.shape)
+		IDX = numpy.where(BIDX > 0)
+		#print IDX
+		outIMG[IDX] = Remap[BIDX[IDX]]
+		
+		#print outIMG[outIMG > 0]
+		#print inIMG[outIMG > 0]
+		#quit()
+		#INonZero = IMG[IDX]
 		#INonZero = setmember1d_nu(INonZero, LabelsAll)
-		ID = numpy.in1d(INonZero.ravel(), LabelsAll)
-		I = numpy.array(IMG)
-		I[IDX] = INonZero
-		del INonZero
+		#ID = numpy.in1d(INonZero.ravel(), LabelsAll)
+		
+		#I = numpy.array(IMG)
+		#I[IDX] = INonZero
+		#del INonZero
 		#print I.shape
 		##print I.shape
 		# merge regions if required
-		I.resize(IMG.shape)
+		#I.resize(IMG.shape)
 
-		if binarise == False:
-			I = IMG * I
-			IDX = I.nonzero()
-			J = I[IDX]
-			for i in range(J.size):
-				#print str(int(I.flat[i]))
-				J[i] = Remap[J[i]]
-				#f(I.flat[i] > 0):
-				#	print str(I.flat[i]) + " " + str(Remap[I.flat[i]])
-				#I.flat[i] = Remap[I.flat[i]]
-			# remap values to the indices that they appear
-			#I = I.astype(int)
-			I[IDX] = J
-			del J
-		else:
-			I = I.astype(numpy.uint8)
-	return I
+		if binarise == True:
+			outIMG = (outIMG > 0).astype(numpy.uint8)
+	return outIMG
 
 def processFile(inputNIIFileName, labels, outputNIIFileName, binarise = False):
 	
@@ -276,8 +342,8 @@ def main():
 	
 	# do the basic WM mask
 
-	processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '.nii.gz'), binarise = True)
-	processFile(APARCFIRSTDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz'), binarise = True)
+	#processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '.nii.gz'), binarise = True)
+	#processFile(APARCFIRSTDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz'), binarise = True)
 
 	if schemesToDo != None:
 		realSchemesToDo = list()
