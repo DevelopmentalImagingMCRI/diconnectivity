@@ -21,11 +21,6 @@ def longUsage():
 	usageString = [ \
 	"STRUCTURAL IMAGE PROCESSING DIRECTIVES"
 	"", \
-	"\t--struct-reorient: reorient T1 to canonical orientation", \
-	"\t\tINPUT: " + os.path.join(ConnEnv['RAWT1'], '<subject id>.nii.gz'), \
-	"\t\tOUTPUT: " + os.path.join(ConnEnv['T1REORIENT'], '<subject id>.nii.gz'), \
-	"\t\tChanges the slice orientation of the input to axial (canonical orientation) with fslswapdim. If the input is already in canonical orientation then the output will be a symbolic link to the input", \
-	"", \
 	"\t--struct-neckcrop: crops neck slices off T1, depends --struct-reorient", \
 	"\t\tINPUT: " + os.path.join(ConnEnv['T1REORIENT'], '<subject id>.nii.gz'), \
 	"\t\tOUTPUT: " + os.path.join(ConnEnv['T1NECKCROPPED'], '<subject id>.nii.gz'), \
@@ -71,11 +66,6 @@ def longUsage():
 	"\t\t--struct-freesurfer-long=<long subject directory>: if a subject has a longitudinal output, specify it in this option to use it instead of the cross"
 	"", \
 	"DIFFUSION IMAGE PROCESSING DIRECTIVES"
-	"", \
-	"\t--dwi-reorient: reorient DWI image to canonical orientation", \
-	"\t\tINPUT: " + os.path.join(ConnEnv['RAWDWI'], '<subject id>.nii.gz'), \
-	"\t\tOUTPUT: " + os.path.join(ConnEnv['DWIREORIENT'], '<subject id>.nii.gz'), \
-	"\t\tChanges the slice orientation of the input to axial (canonical orientation) with fslswapdim. If the input is already in canonical orientation then the output will be a symbolic link to the input", \
 	"", \
 	"\t--dwi-savebzero: extracts b-zero image (first image in DWI image), depends --dwi-reorient", \
 	"\t\tINPUT: " + os.path.join(ConnEnv['DWIREORIENT'], '<subject id>.nii.gz'), \
@@ -157,9 +147,7 @@ def usage():
 	"", \
 	"STRUCTURAL IMAGE PROCESSING DIRECTIVES"
 	"", \
-	"\t--struct-reorient: reorient T1 to canonical orientation", \
-	"", \
-	"\t--struct-neckcrop: crops neck slices off T1, depends --struct-reorient", \
+	"\t--struct-neckcrop: crops neck slices off T1, output will be in MNI axis orientations", \
 	"", \
 	"\t--struct-biascorrect: performs bias correction with N4, depends --struct-neckcrop", \
 	"\t\tOPTIONS:", \
@@ -242,6 +230,8 @@ def main():
 	"struct-freesurfer", \
 	"struct-extractfreesurferbaselabels", \
 	"dwi-reorient", \
+	"dwi-eddy", \
+	"dwi-topup", \
 	"dwi-savebzero", \
 	"dwi-skullstrip", \
 	"dwi-blipudreorient", \
@@ -423,8 +413,9 @@ def main():
 			print "\t" + k
 
 	if doProcessingSteps['struct-reorient']:
-		cmd = ["StructReorient", subjectID]
-		runCommand(cmd)
+		#cmd = ["StructReorient", subjectID]
+		#runCommand(cmd)
+		print "--struct-reorient no longer needed, ignoring"
 		pass
 	
 	if doProcessingSteps['struct-neckcrop']:
@@ -475,10 +466,17 @@ def main():
 		pass
 	
 	if doProcessingSteps['dwi-reorient']:
-		cmd = ["DWIReorient", subjectID]
-		runCommand(cmd)
+		#cmd = ["DWIReorient", subjectID]
+		#runCommand(cmd)
+
 		pass
-	
+
+	if doProcessingSteps['dwi-topup']:
+		pass
+
+	if doProcessingSteps['dwi-eddy']:
+		pass
+
 	if doProcessingSteps['dwi-savebzero']:
 		cmd = ["DWISaveBZero", subjectID]
 		if DWIUseEddy == True:
