@@ -120,7 +120,7 @@ def in1dLOC(A, B):
 	
 	return outIDX
 
-#profile
+#@profile
 def extractLabels(inIMG = None, Labels = None, binarise = False):
 
 	#print Labels
@@ -153,26 +153,65 @@ def extractLabels(inIMG = None, Labels = None, binarise = False):
 	elif isinstance(Labels, numpy.ndarray):
 		LabelsAll = numpy.array(Labels)
 		Remap = numpy.arange(1, Labels.size + 1)
-	print numpy.stack((LabelsAll, Remap))
 	if numpy.all(inIMG == 0):
 		outIMG = numpy.zeros(inIMG.shape, dtype = numpy.uint8)
 	else:
 		
 		# make sure LabelsAll is sorted
-		I = numpy.argsort(LabelsAll)
-		LabelsAll = LabelsAll[I]
-		Remap = Remap[I]
-		del I
+		LabelsAllSortedIDX = numpy.argsort(LabelsAll)
+		LabelsAllSorted = LabelsAll[LabelsAllSortedIDX]
+		
+		# in1d is slow, try making a unique version of inIMG then check
+		# unique is slower than in1d
 
-		BIDX = in1dLOC(inIMG.ravel(), LabelsAll)
+#		uniqueInIMG, uniqueInIMGInverse = numpy.unique(inIMG.ravel(), return_inverse = True)
+#		print uniqueInIMG
+#
+#		print uniqueInIMGInverse
+#		
+#		uniqueValidLabelsMask = numpy.in1d(uniqueInIMG.flatten(), LabelsAllSorted, assume_unique = True)
+#		validLabelsMask2 = numpy.reshape(uniqueValidLabelsMask[uniqueInIMGInverse], inIMG.shape)
+#
+		validLabelsMask = numpy.in1d(inIMG.flatten(), LabelsAllSorted)
+		validLabelsMask = numpy.reshape(validLabelsMask, inIMG.shape)
+		validLabels = inIMG[validLabelsMask]
+
+		# find the location in labels
+		IDX = numpy.searchsorted(LabelsAllSorted, validLabels)
 		
+		IDX = LabelsAllSortedIDX[IDX]
+
 		outIMG = numpy.zeros(inIMG.shape, dtype = numpy.uint8)
+		#try:
+		outIMG[validLabelsMask] = numpy.uint8(Remap[IDX])
+		#print numpy.stack((LabelsAll, Remap))
+		#T = Remap[IDX]
+		#print validLabels[:10]
+		#print T[:10]
+		#except Exception:
+		#	I = numpy.where(IDX >= Remap.size)
+		#	print validLabels[I] 
+		#	print numpy.stack((LabelsAll, Remap))
+		#	quit()
+		#print inIMG[NonZeroIDX]
+		#print b
+		#print LabelsAll[63]
 		
-		BIDX = numpy.reshape(BIDX, inIMG.shape)
-		IDX = numpy.where(BIDX > 0)
-		#print IDX
-		outIMG[IDX] = Remap[BIDX[IDX]]
 		
+#		I = numpy.argsort(LabelsAll[NonZeroIDX])
+#		LabelsAll = LabelsAll[I]
+#		Remap = Remap[I]
+#		del I
+#
+#		BIDX = in1dLOC(inIMG.ravel(), LabelsAll)
+#		
+#		outIMG = numpy.zeros(inIMG.shape, dtype = numpy.uint8)
+#		
+#		BIDX = numpy.reshape(BIDX, inIMG.shape)
+#		IDX = numpy.where(BIDX > 0)
+#		#print IDX
+#		outIMG[IDX] = Remap[BIDX[IDX]]
+#		
 		#print outIMG[outIMG > 0]
 		#print inIMG[outIMG > 0]
 		#quit()
@@ -338,7 +377,7 @@ def main():
 	#print CortexLabels
 	
 	
-	suffixes = [".first" + DWISpaceSuffix, DWISpaceSuffix]
+	suffixes = [".first" + DWISpaceSuffix, ".first_linearonly" + DWISpaceSuffix, DWISpaceSuffix]
 	
 	# do the basic WM mask
 
