@@ -10,9 +10,9 @@ then
 	echo "Usage: $0 <subject id>"
 else
 
-	if [ "x`imglob $T1REORIENT/$1`" = "x" ]
+	if [ "x`imglob $RAWT1/$1`" = "x" ]
 	then
-		echo "The Raw T1 reoriented file $T1REORIENT/$1 does not exist, run --struct-reorient"
+		echo "The Raw T1 file $RAWT1/$1 does not exist"
 		exit 1;
 	fi
 
