@@ -57,6 +57,42 @@ def setmember1d_nu(a1, a2):
 	mask = numpy.array(mask)
 	return mask[ind.argsort()]
 
+def in1dFast(A, B):
+	ABConcat = numpy.concatenate((B, A))
+	ABConcatSortedIDX = numpy.argsort(ABConcat)
+	
+	#print ABConcat
+	#print ABConcatSortedIDX
+	ABConcatSorted = ABConcat[ABConcatSortedIDX]
+	#print ABConcatSorted
+
+	# the locations of the elements of B are those whose indices are less than or equal to B.size
+	BIDXInSorted = numpy.where(ABConcatSortedIDX < B.size)[0]
+	
+	#print BIDXInSorted
+	
+	# make a mask that is 1 for the locations of the B elements
+	BIDXInSortedMask = numpy.zeros_like(ABConcatSortedIDX)
+	BIDXInSortedMask[BIDXInSorted] = 1
+
+	# perform a cumulative sum so that BIDXInSortedCS[I] is the index we are looking for that element in B
+	
+	BIDXInSortedCS = numpy.cumsum(BIDXInSortedMask) - 1
+	#print BIDXInSortedMask
+	#print BIDXInSortedCS
+	#InvalidIDX = BIDXInSortedCS < 0
+
+	#BIDXInSortedCS[InvalidIDX] = 0
+	
+	# now check for equality between ABConcat BIDXInSortedCS
+	AIDXEqualToB = (ABConcatSorted == B[BIDXInSortedCS])
+	outMask = numpy.zeros(A.shape, dtype = numpy.bool)
+	AIDXInSortedMask = (ABConcatSortedIDX >= B.size)
+	
+	AEqualToBIDX = numpy.where(numpy.logical_and(AIDXEqualToB, AIDXInSortedMask))[0]
+	outMask[ABConcatSortedIDX[AEqualToBIDX] - B.size] = AEqualToBIDX
+	return outMask
+
 # change 27/4/2012
 # make it so that the labels come in as a list whose elements can contain multiple values
 # that way users can specify multiple values for one region
@@ -110,8 +146,6 @@ def in1dLOC(A, B):
 	outIDX.fill(-1)
 	
 	AIDXInSortedMask = (ABConcatSortedIDX >= B.size)
-	#print AIDXInSortedMask	
-	# 
 	
 	AEqualToBIDX = numpy.where(numpy.logical_and(AIDXEqualToB, AIDXInSortedMask))[0]
 	
