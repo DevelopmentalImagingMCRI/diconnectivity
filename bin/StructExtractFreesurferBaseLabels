@@ -99,6 +99,7 @@ else
 				;;
 			3)
 				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_dwispace.nii.gz
+				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_linearonly_dwispace.nii.gz
 				;;
 			0)
 				flirt -applyxfm -in $OUTDIR/${i}_linear_reg -init $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -ref $DWIBZERO/${SUBJECTID}  -out $OUTDIR/${i}_dwi -interp nearestneighbour
