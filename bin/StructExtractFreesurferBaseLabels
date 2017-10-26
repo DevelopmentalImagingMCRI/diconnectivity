@@ -17,18 +17,6 @@ then
 	echo "Usage: $0 <subject id> <mrtrixversion> [freesurferlong]"
 else
 	
-#	if [ ! -z "`mrtransform -version | grep "mrtransform 0.2"`" ]
-#	then
-#		MRTRANSFORMVERSION=2
-#	elif [ ! -z "`mrtransform -version | grep "mrtransform 0.3"`" ]
-#	then
-#		MRTRANSFORMVERSION=3
-#	else
-#		echo "mrtransform version unknown, I have to use flirt"
-#		MRTRANSFORMVERSION=0
-#	fi
-
-	
 	SUBJECTID=$1
 	MRTRANSFORMVERSION=$2
 	FREESURFERLONG=$3
@@ -46,28 +34,12 @@ else
 	mkdir -p $OUTDIR
 
 	FILES=("rawavg" "aparc.a2009s+aseg" "aparc+aseg" "aparc.DKTatlas+aseg" "wmparc" "aparc.a2009s+aseg.first" "aparc+aseg.first" "aparc.DKTatlas+aseg.first")
-	#FILES=("rawavg")
-#FILES=("aparc+aseg")
-# 31/08/2001 changed to NIFTI format
-#mri_convert $FREESURFER/$1/mri/orig/001.mgz $FREESURFER/$1/mri/orig/001.nii.gz
-#imcp $FREESURFER/$1/mri/orig/001.nii.gz $OUTDIR
-#WarpImageMultiTransform 3 $OUTDIR/001.nii.gz $OUTDIR/001_linear_reg.nii.gz -R $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg.nii.gz -i $DWIREGTOSTRUCT/$1/bzero_registered_to_structuralAffine.txt $DWIREGTOSTRUCT/$1/bzero_registered_to_structuralInverseWarp.nii.gz
-#imrm $OUTDIR/001_dwi
-#mrtransform $OUTDIR/001_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg.mat -reference $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz -inverse -flipx $OUTDIR/001_dwi.nii.gz
-#convert_xfm -omat $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg_inv.mat -inverse $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg.mat
-#flirt -applyxfm -in $OUTDIR/001_linear_reg -init $DWIREGTOSTRUCT/$1/bzero_brain_linear_reg_inv.mat -ref $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz  -out $OUTDIR/a01_dwi_flirt
-	
-#convert_xfm -omat $DWIREGTOSTRUCT/${SUBJECTIDo/bzero_brain_linear_reg_inv_dwi.mat -inverse $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwi.mat
 	convert_xfm -omat $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwiorient.mat -inverse $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwiorient.mat
 	
 	if [ "$MRTRANSFORMVERSION" = "3" ]
 	then
-#$MRTRIX3BINDIR/transformcalc -force -flirt_import $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_mrtrix.mat
 		$MRTRIX3BINDIR/transformconvert -force $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwiorient.mat $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz flirt_import $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat
-#matrix_in in ref flirt_import output
-#-force -flirt_import $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $T1SKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_mrtrix.mat
 	fi
-#lirt 
 
 	for i in "${FILES[@]}"
 	do
@@ -79,20 +51,11 @@ else
 			
 # convert to dwispace
 			SwapOrientToRef --use-ref-geom $OUTDIR/${i}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz $OUTDIR/${i}_dwiorient.nii.gz
-			if [ "x`imglob $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii*`" != "x" ]
+			if [ "x`imglob $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii*`" != "x" ]
 			then
-#echo "ANTS warp found, applying"
-				WarpImageMultiTransform 3 $OUTDIR/${i}_dwiorient.nii.gz $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -R $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwiorient.nii.gz --use-NN $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initInverseWarp.nii.gz
-			else
-#echo "No ANTS warp found, just running mrtransform"
-				imcp $OUTDIR/${i} $OUTDIR/${i}_linear_reg
+				antsApplyTransforms -d 3 --input $OUTDIR/${i}_dwiorient.nii.gz --reference-image  $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz --output $OUTDIR/${i}_dwiorient.nii.gz --transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii.gz 
 			fi
-# find the version of mrtransform
-# look for mrtrix 2
-#MRTRANSFORMVERSION=2
-#/home/addo/mrtrix-0.2.12/bin/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat -reference $DWIBZERO/${SUBJECTID}.nii.gz -inverse -flipx $OUTDIR/${i}_dwi2.nii.gz
-#/home/addo/dev/mrtrix3/bin/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_mrtrix.mat $OUTDIR/${i}_dwi3.nii.gz
-			echo $MRTRIX3BINDIR
+			
 			case $MRTRANSFORMVERSION in
 			2)
 				$MRTRIX2BINDIR/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat -reference $DWIBZERO/${SUBJECTID}.nii.gz -inverse -flipx $OUTDIR/${i}_dwi.nii.gz
@@ -105,20 +68,6 @@ else
 				flirt -applyxfm -in $OUTDIR/${i}_linear_reg -init $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -ref $DWIBZERO/${SUBJECTID}  -out $OUTDIR/${i}_dwi -interp nearestneighbour
 				;;
 			esac
-#imrm $OUTDIR/${i}_linear_reg
-# invert the linear transformation of FLIRT using mrtransform
-#fslorient $OUTDIR/${i}_linear_reg
-#fslswapdim $OUTDIR/${i}_linear_reg LR PA IS $OUTDIR/${i}_linear_reg
-#fslchfiletype NIFTI $OUTDIR/${i}_linear_reg
-#mrconvert $OUTDIR/${i}_linear_reg.nii $OUTDIR/${i}_linear_reg.mif
-#fslchfiletype NIFTI_GZ $OUTDIR/${i}_linear_reg
-# the next line is for MIF
-#mrtransform $OUTDIR/${i}_linear_reg.nii -transform $REGBZEROTOT1/bzero_brain_linear_reg.mat -reference $OUTDIR/bzero_brain.nii -inverse -flipx $OUTDIR/${i}_dwi.mif
-#	mrtransform $OUTDIR/${i}_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat -reference $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz -inverse -flipx $OUTDIR/${i}_dwi.nii.gz
-#fslchfiletype NIFTI_GZ $OUTDIR/${i}_dwi
-#mrtransform $OUTDIR/${i}_linear_reg.nii -transform $REGBZEROTOT1/bzero_brain_linear_reg.mat -reference $OUTDIR/bzero_brain.nii -inverse -flipx $OUTDIR/${i}_dwi_flipx.nii
-#		flirt -applyxfm -in $OUTDIR/${i}_linear_reg -init $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -ref $DWISKULLSTRIPPED/${1}/bzero_brain.nii.gz  -out $OUTDIR/${i}_dwi_flirt -interp nearestneighbour
 		fi
 	done
-#fslchfiletype NIFTI_GZ $OUTDIR/bzero_brain
 fi
