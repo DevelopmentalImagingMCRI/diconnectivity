@@ -25,6 +25,17 @@ else
 	--bet)
 		bet $T1BIASCORRECTED/${SUBJECTID} $T1SKULLSTRIPPED/${SUBJECTID} -f 0.3 -R -m
 		;;
+	--ants)
+		cd $T1SKULLSTRIPPED
+		SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+		export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
+		antsBrainExtraction.sh -d 3 -a ../$T1BIASCORRECTED/${SUBJECTID}.nii.gz -e $SCRIPTDIR/../lib/ants_skull_strip_data/Finaltemplate_2mm.nii.gz -m $SCRIPTDIR/../lib/ants_skull_strip_data/brainmask_2mm.nii.gz -o ${SUBJECTID} -s nii.gz
+		rm -fr ${SUBJECTID}
+		immv ${SUBJECTID}BrainExtractionBrain ${SUBJECTID}
+		immv ${SUBJECTID}BrainExtractionMask ${SUBJECTID}_mask
+		rm -f ${SUBJECTID}BrainExtractionPrior0GenericAffine.mat
+
+		;;
 	--freesurfer)
 		if [ ! -f "$FREESURFER/$SUBJECTID/mri/brainmask.mgz" ]
 		then

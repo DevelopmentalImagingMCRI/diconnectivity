@@ -40,7 +40,8 @@ def longUsage():
 	"\t\t\t" + os.path.join(ConnEnv['T1SKULLSTRIPPED'], '<subject id>_mask.nii.gz'), \
 	"\t\tPerforms a skull strip (brain extraction) on the T1 structural image. There are numerous choices of method supported (see below)", \
 	"\t\tOPTIONS:", \
-	"\t\t\t--struct-skullstrip-use-BET: use FSL's BET (default)", \
+	"\t\t\t--struct-skullstrip-use-ANTS: use ANTS antsBrainExtraction.sh (default)", \
+	"\t\t\t--struct-skullstrip-use-BET: use FSL's BET", \
 	"\t\t\t--struct-skullstrip-use-freesurfer: use skull strip output from freesurfer (depends --struct-freesurfer)", \
 	"\t\t\t--struct-skullstrip-use-WS: use Richard's watershed method", \
 	"", \
@@ -155,7 +156,8 @@ def usage():
 	"", \
 	"\t--struct-skullstrip: performs skull stripping, depends --struct-biascorrect", \
 	"\t\tOPTIONS:", \
-	"\t\t\t--struct-skullstrip-use-BET: use FSL's BET (default)", \
+	"\t\t\t--struct-skullstrip-use-ANTS: use ANTS antsBrainExtraction.sh (default)", \
+	"\t\t\t--struct-skullstrip-use-BET: use FSL's BET", \
 	"\t\t\t--struct-skullstrip-use-freesurfer: use skull strip output from freesurfer (depends --struct-freesurfer)", \
 	"\t\t\t--struct-skullstrip-use-WS: use Richard's watershed method", \
 	"", \
@@ -258,7 +260,7 @@ def main():
 	longOptStrings.extend(["struct-biascorrect-N4-options="])
 
 #	struct-skullstrip
-	longOptStrings.extend(["struct-skullstrip-use-BET", "struct-skullstrip-use-freesurfer", "struct-skullstrip-use-WS"])
+	longOptStrings.extend(["struct-skullstrip-use-ANTS", "struct-skullstrip-use-BET", "struct-skullstrip-use-freesurfer", "struct-skullstrip-use-WS"])
 
 	# skull strip method maybe
 #	struct-freesurfer
@@ -295,7 +297,7 @@ def main():
 	subjectID = None
 	structBiasCorrectN4Options = None
 	
-	structSkullStripMethod = '--bet'
+	structSkullStripMethod = '--ants'
 	
 	freesurferRun = True
 	structFreesurferUseBiasCorrected = True
