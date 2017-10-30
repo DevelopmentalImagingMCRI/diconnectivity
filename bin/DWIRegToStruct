@@ -15,9 +15,9 @@ else
 	
 # invert the contrast of the T1 structural to make it look like a T2 image, save as structural_brain_inverted
 # structural_brain_inverted = max(structural_brain) - structural_brain
-	MAXINTENSITY=`fslstats ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain -R | cut -f2 -d \  `
+	MAXINTENSITY=`fslstats $T1SKULLSTRIPPED/${SUBJECTID} -R | cut -f2 -d \  `
 #fslmaths $T1SKULLSTRIPPED/${SUBJECTID} -mul -1 -add $MAXINTENSITY -mas $T1SKULLSTRIPPED/${SUBJECTID}_mask $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted
-	fslmaths ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionBrain -mul -1 -add $MAXINTENSITY -mas ANTSSkullStrip2mm/${SUBJECTID}BrainExtractionMask $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted
+	fslmaths $T1SKULLSTRIPPED/${SUBJECTID} -mul -1 -add $MAXINTENSITY -mas $T1SKULLSTRIPPED/${SUBJECTID} $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted
 	
 	SwapOrientToRef $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz
 	
