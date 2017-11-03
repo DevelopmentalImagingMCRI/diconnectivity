@@ -49,11 +49,11 @@ else
 	c3d_affine_tool -ref $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz -src $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient.mat -fsl2ras -oitk $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient_itk.mat
 
 # run ANTS with the FLIRT transformation as the initialiser, do not perform affine registration with ANTS
-	antsRegistration -d 3 --initial-moving-transform $DWIREGTOSTRUCT/${SUBJECTID}/$IMAGENAME/${FLIRTOUTPREFIX}_dwiorient_itk.mat -m MI[$DWIREGTOSTRUCT/${SUBJECTID}/$IMAGENAME/structural_brain_inverted_dwiorient.nii.gz,$JIANDIR/$BZEROIMAGE,1,32,Random,0.5] --use-histogram-matching -o [$DWIREGTOSTRUCT/${SUBJECTID}/$IMAGENAME/bzero_reg_with_flirt_init,$DWIREGTOSTRUCT/${SUBJECTID}/$IMAGENAME/bzero_brain_ants_reg_dwiorient.nii.gz] -c 100x50x25 -t SyN[0.5] -v --shrink-factors 4x2x1 --smoothing-sigmas 4x2x1vox --float
+	antsRegistration -d 3 --initial-moving-transform $DWIREGTOSTRUCT/${SUBJECTID}/${FLIRTOUTPREFIX}_dwiorient_itk.mat -m MI[$DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz,$DWISKULLSTRIPPED/${SUBJECTID}.nii.gz,1,32,Random,0.5] --use-histogram-matching -o [$DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init,$DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz] -c 100x50x25 -t SyN[0.5] -v --shrink-factors 4x2x1 --smoothing-sigmas 4x2x1vox --float
 
 #exit;
 # apply the nonlinear ANTS transform to the bzero image to put it into T1 space, 
-	antsApplyTransforms --float -v -e 0 -i $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -r $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initAffine.txt 
+#antsApplyTransforms --float -v -e 0 -i $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz -r $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz -o $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_initWarp.nii.gz -t $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init0GenericAffine.mat
 	
 	SwapOrientToRef --use-ref-geom $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg.nii.gz
 	SwapOrientToRef --use-ref-geom $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.nii.gz
