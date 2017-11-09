@@ -53,7 +53,7 @@ else
 			SwapOrientToRef --use-ref-geom $OUTDIR/${i}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz $OUTDIR/${i}_dwiorient.nii.gz
 			if [ "x`imglob $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii*`" != "x" ]
 			then
-				antsApplyTransforms -d 3 --input $OUTDIR/${i}_dwiorient.nii.gz --reference-image  $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz --output $OUTDIR/${i}_dwiorient.nii.gz --transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii.gz 
+				antsApplyTransforms -d 3 --input $OUTDIR/${i}_dwiorient.nii.gz --reference-image  $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz --output $OUTDIR/${i}_linear_reg_dwiorient.nii.gz --transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii.gz 
 			fi
 			
 			case $MRTRANSFORMVERSION in
@@ -62,7 +62,8 @@ else
 				;;
 			3)
 				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_dwispace.nii.gz
-				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_linearonly_dwispace.nii.gz
+				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat -template mrtrixEddy/$SUBJECTID/fa.nii.gz -interp nearest $OUTDIR/${i}_dwispace_resliced.nii.gz
+				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_linearonly_dwispace.nii.gz
 				;;
 			0)
 				flirt -applyxfm -in $OUTDIR/${i}_linear_reg -init $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -ref $DWIBZERO/${SUBJECTID}  -out $OUTDIR/${i}_dwi -interp nearestneighbour

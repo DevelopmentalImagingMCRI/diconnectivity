@@ -205,19 +205,25 @@ def extractLabels(inIMG = None, Labels = None, binarise = False):
 #		
 #		uniqueValidLabelsMask = numpy.in1d(uniqueInIMG.flatten(), LabelsAllSorted, assume_unique = True)
 #		validLabelsMask2 = numpy.reshape(uniqueValidLabelsMask[uniqueInIMGInverse], inIMG.shape)
-#
-		validLabelsMask = numpy.in1d(inIMG.flatten(), LabelsAllSorted)
-		validLabelsMask = numpy.reshape(validLabelsMask, inIMG.shape)
-		validLabels = inIMG[validLabelsMask]
+		
+		nonZeroIMG = numpy.where(inIMG.flatten() > 0)
+		T = inIMG.flatten()[nonZeroIMG]
+		validLabelsMask = numpy.in1d(T, LabelsAllSorted)
+		#validLabelsMask = numpy.reshape(validLabelsMask, inIMG.shape)
+		validLabels = T[validLabelsMask]
 
 		# find the location in labels
 		IDX = numpy.searchsorted(LabelsAllSorted, validLabels)
 		
 		IDX = LabelsAllSortedIDX[IDX]
 
-		outIMG = numpy.zeros(inIMG.shape, dtype = numpy.uint8)
+		outT = numpy.zeros(T.shape, dtype = numpy.uint8)
 		#try:
-		outIMG[validLabelsMask] = numpy.uint8(Remap[IDX])
+		outT[validLabelsMask] = numpy.uint8(Remap[IDX])
+		
+		outIMG = numpy.zeros((inIMG.size), dtype = numpy.uint8)
+		outIMG[nonZeroIMG] = outT
+		outIMG = numpy.reshape(outIMG, inIMG.shape)
 		#print numpy.stack((LabelsAll, Remap))
 		#T = Remap[IDX]
 		#print validLabels[:10]
@@ -365,7 +371,9 @@ def main():
 
 	APARCFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg'))
 	APARCDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg' + DWISpaceSuffix))
+	APARCDWIReslicedFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg' + DWISpaceSuffix + "_resliced"))
 	APARCFIRSTDWIFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg.first' + DWISpaceSuffix))
+	APARCFIRSTDWIReslicedFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg.first' + DWISpaceSuffix + "_resliced"))
 	APARCLinearRegFile = imglob(os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg_linear_reg'))
 	#APARCFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc+aseg')
 	#APARCOHNINEFile = os.path.join(freesurferBaseLabelDir, subjectID, 'aparc.a2009s+aseg')
@@ -415,8 +423,10 @@ def main():
 	
 	# do the basic WM mask
 
-	#processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '.nii.gz'), binarise = True)
-	#processFile(APARCFIRSTDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz'), binarise = True)
+	processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '.nii.gz'), binarise = True)
+	processFile(APARCDWIReslicedFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '_resliced.nii.gz'), binarise = True)
+	processFile(APARCFIRSTDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz'), binarise = True)
+	processFile(APARCFIRSTDWIReslicedFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '_resliced.nii.gz'), binarise = True)
 
 	if schemesToDo != None:
 		realSchemesToDo = list()
