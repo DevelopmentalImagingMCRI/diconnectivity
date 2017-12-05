@@ -418,15 +418,15 @@ def main():
 	#255 CC_Anterior
 	#print CortexLabels
 	
-	
 	suffixes = [".first" + DWISpaceSuffix, ".first_linearonly" + DWISpaceSuffix, DWISpaceSuffix]
 	
 	# do the basic WM mask
 
 	processFile(APARCDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '.nii.gz'), binarise = True)
 	processFile(APARCDWIReslicedFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm' + DWISpaceSuffix + '_resliced.nii.gz'), binarise = True)
-	processFile(APARCFIRSTDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz'), binarise = True)
-	processFile(APARCFIRSTDWIReslicedFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '_resliced.nii.gz'), binarise = True)
+	if os.path.isfile(os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz')):
+		processFile(APARCFIRSTDWIFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '.nii.gz'), binarise = True)
+		processFile(APARCFIRSTDWIReslicedFile, WMValues, os.path.join(connectomeSeedsDir, subjectID, 'freesurfer_wm.first' + DWISpaceSuffix + '_resliced.nii.gz'), binarise = True)
 
 	if schemesToDo != None:
 		realSchemesToDo = list()
@@ -458,7 +458,7 @@ def main():
 
 		for curSuffix in suffixes:
 			SeedFileName = imglob(os.path.join(freesurferBaseLabelDir, subjectID, CortexLabels[curScheme]['seedfile'] + curSuffix))
-			if SeedFileName != None:
+			if SeedFileName != None and os.path.isfile(os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + curSuffix + '.nii.gz')):
 				processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + curSuffix + '.nii.gz'), binarise = False) 
 				processFile(SeedFileName, CortexLabels[curScheme]['values'], os.path.join(connectomeSeedsDir, subjectID, 'seeds_' + curScheme.lower() + curSuffix + '_mask.nii.gz'), binarise = True) 
 				processFile(SeedFileName, curExcludeValues, os.path.join(connectomeSeedsDir, subjectID, 'excludes_' + curScheme.lower() + curSuffix + '.nii.gz'), binarise = True) 
