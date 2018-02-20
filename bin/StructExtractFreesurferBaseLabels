@@ -53,7 +53,7 @@ else
 			SwapOrientToRef --use-ref-geom $OUTDIR/${i}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz $OUTDIR/${i}_dwiorient.nii.gz
 			if [ "x`imglob $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii*`" != "x" ]
 			then
-				antsApplyTransforms -d 3 --input $OUTDIR/${i}_dwiorient.nii.gz --reference-image  $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz --output $OUTDIR/${i}_linear_reg_dwiorient.nii.gz --transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii.gz 
+				antsApplyTransforms -d 3 --input $OUTDIR/${i}_dwiorient.nii.gz --reference-image  $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz --output $OUTDIR/${i}_linear_reg_dwiorient.nii.gz --transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii.gz --interpolation NearestNeighbor
 			fi
 			
 			case $MRTRANSFORMVERSION in
