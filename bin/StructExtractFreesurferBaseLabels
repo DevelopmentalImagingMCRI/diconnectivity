@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 . `which DIConnEnv.sh`
 
@@ -10,7 +10,7 @@ fi
 # extracts the base freesurfer label images for later seed generation
 # puts the outputs in T1 and DWI space
 # looks for existence of a non-linear warp and applies it, used in cases where no blip up/down images are available
-export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=8
+export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
 
 if [ -z "$1" -o -z "$2" ]
 then
@@ -38,7 +38,7 @@ else
 	
 	if [ "$MRTRANSFORMVERSION" = "3" ]
 	then
-		$MRTRIX3BINDIR/transformconvert -force $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwiorient.mat $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz flirt_import $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat
+		$MRTRIX3BINDIR/transformconvert -quiet -force $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwiorient.mat $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz $DWISKULLSTRIPPED/${SUBJECTID}.nii.gz flirt_import $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat
 	fi
 
 	for i in "${FILES[@]}"
@@ -47,10 +47,16 @@ else
 		if [ -f "$FREESURFER/$FREESURFERSUBJECT/mri/${i}.mgz" ]
 		then
 # reslice the segmentation back to native T1 space
-			mri_convert -rl $FREESURFER/$SUBJECTID/mri/orig/001.mgz -rt nearest $FREESURFER/$FREESURFERSUBJECT/mri/${i}.mgz $OUTDIR/${i}.nii.gz --no_scale 1 -odt int
+			if [ "$i" == "rawavg" ]
+			then
+				mri_convert -rl $FREESURFER/$SUBJECTID/mri/orig/001.mgz -rt nearest $FREESURFER/$FREESURFERSUBJECT/mri/${i}.mgz $OUTDIR/${i}.nii.gz --no_scale 1
+			else
+				mri_convert -rl $FREESURFER/$SUBJECTID/mri/orig/001.mgz -rt nearest $FREESURFER/$FREESURFERSUBJECT/mri/${i}.mgz $OUTDIR/${i}.nii.gz --no_scale 1 -odt short
+			fi
 			
 # convert to dwispace
 			SwapOrientToRef --use-ref-geom $OUTDIR/${i}.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz $OUTDIR/${i}_dwiorient.nii.gz
+			fslcpgeom $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient $OUTDIR/${i}_dwiorient
 			if [ "x`imglob $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii*`" != "x" ]
 			then
 				antsApplyTransforms -d 3 --input $OUTDIR/${i}_dwiorient.nii.gz --reference-image  $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted_dwiorient.nii.gz --output $OUTDIR/${i}_linear_reg_dwiorient.nii.gz --transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_reg_with_flirt_init1InverseWarp.nii.gz --interpolation NearestNeighbor
@@ -61,9 +67,10 @@ else
 				$MRTRIX2BINDIR/mrtransform $OUTDIR/${i}_linear_reg.nii.gz -transform $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.mat -reference $DWIBZERO/${SUBJECTID}.nii.gz -inverse -flipx $OUTDIR/${i}_dwi.nii.gz
 				;;
 			3)
+#MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_dwispace.nii.gz
 				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_dwispace.nii.gz
-				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat -template mrtrixEddy/$SUBJECTID/fa.nii.gz -interp nearest $OUTDIR/${i}_dwispace_resliced.nii.gz
-				$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_linearonly_dwispace.nii.gz
+#$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat -template mrtrixEddy/$SUBJECTID/fa.nii.gz -interp nearest $OUTDIR/${i}_dwispace_resliced.nii.gz
+#$MRTRIX3BINDIR/mrtransform $OUTDIR/${i}_linear_reg_dwiorient.nii.gz -quiet -force -linear $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv_dwi_mrtrix.mat $OUTDIR/${i}_linearonly_dwispace.nii.gz
 				;;
 			0)
 				flirt -applyxfm -in $OUTDIR/${i}_linear_reg -init $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_inv.mat -ref $DWIBZERO/${SUBJECTID}  -out $OUTDIR/${i}_dwi -interp nearestneighbour

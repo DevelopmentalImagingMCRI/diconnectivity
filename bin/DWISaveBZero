@@ -23,12 +23,6 @@ else
 		fslroi $DWIEDDY/${1}.eddy_outlier_free_data $DWIBZERO/${1} 0 1
 	
 	else
-
-		if [ "x`imglob $DWIREORIENT/${1}`" = "x" ]
-		then
-			echo "DWI Reorient image $DWIREORIENT/${1} not found, run --dwi-reorient"
-			exit 1
-		fi
-		fslroi $DWIREORIENT/${1} $DWIBZERO/${1} 0 1
+		fslroi $RAWDWI/${1} $DWIBZERO/${1} 0 1
 	fi
 fi

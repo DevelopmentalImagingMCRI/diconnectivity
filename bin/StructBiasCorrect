@@ -4,6 +4,7 @@
 
 . `which DIConnEnv.sh`
 
+export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=`nproc`
 if [ -z "$1" ]
 then
 	echo "Usage: $0 <subject id> [non-default N4 options]"

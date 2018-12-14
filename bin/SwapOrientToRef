@@ -53,6 +53,7 @@ refAXCodes = nibabel.aff2axcodes(refNII.get_affine())
 refOrnt = nibabel.orientations.axcodes2ornt(refAXCodes)
 
 inputToRefTransformOrnt = nibabel.orientations.ornt_transform(inputOrnt, refOrnt)
+
 outputIMG = nibabel.orientations.apply_orientation(inputNII.get_data(), inputToRefTransformOrnt)
 
 if useRefGeom:
@@ -60,6 +61,10 @@ if useRefGeom:
 else:
 	outputAffine = NIFTIOrientationTools.applyOrntToNIIAffine(inputNII, inputToRefTransformOrnt)
 
+# set voxel dimensions using the outputAffine
+outputPixdims = numpy.sqrt(numpy.sum(numpy.multiply(outputAffine[0:3, 0:3], outputAffine[0:3, 0:3]), axis = 1))
+
+#print outputAffine
 outputNII = nibabel.Nifti1Image(outputIMG, outputAffine)
 nibabel.save(outputNII, outputNIIFile)
 

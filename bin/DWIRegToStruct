@@ -57,5 +57,7 @@ else
 	
 	SwapOrientToRef --use-ref-geom $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg.nii.gz
 	SwapOrientToRef --use-ref-geom $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg_dwiorient.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.nii.gz
+	fslcpgeom $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_ants_reg.nii.gz
+	fslcpgeom $DWIREGTOSTRUCT/${SUBJECTID}/structural_brain_inverted.nii.gz $DWIREGTOSTRUCT/${SUBJECTID}/bzero_brain_linear_reg.nii.gz
 	
 fi

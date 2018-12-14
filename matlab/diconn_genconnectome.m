@@ -44,6 +44,8 @@ end
 % PARSE VARARGIN for extra options
 
 OtherImages = [];
+TrialNumber = [];
+ReturnStreamtrackCommand = false;
 
 for z = 1:2:length(varargin)
 	if z == length(varargin)
@@ -56,6 +58,10 @@ for z = 1:2:length(varargin)
 				else
 					OtherImages = varargin{z + 1};
 				end
+			case 'trialnumber'
+				TrialNumber = varargin{z + 1};
+			case 'returnstreamtrackcommand'
+				ReturnStreamtrackCommand = varargin{z + 1};
 		end
 	end
 end
@@ -156,6 +162,7 @@ ScriptFileName = mfilename('fullpath');
 switch(MrtrixVersion)
 	case 2
 		MrtrixBinDir = fullfile(PATHSTR, 'mrtrix-0.2.12-conn');
+		MrtrixBinDir = [filesep fullfile('home', 'addo', 'mrtrix-0.2.12-conn')];
 	case 3
 		MrtrixBinDir = [filesep fullfile('home', 'addo', 'dev', 'mrtrix3-conn', 'mrtrix3')];
 end
@@ -170,7 +177,12 @@ while(NumTracksSoFar < TotalNumTracks)
 	
 	switch(MrtrixVersion)
 		case 2
-			LogFile = [tempname '.log'];
+			if ReturnStreamtrackCommand == true
+				LogFile = fullfile(MrtrixSubjDir, Subject, ['tmp_' num2str(TrialNumber) '.log']);
+				TrackFile = fullfile(MrtrixSubjDir, Subject, ['tmp_' num2str(TrialNumber) '.tck']);
+			else
+				LogFile = [tempname '.log'];
+			end
 			switch(lower(MrtrixMethod))
 				case 'dt_stream'
 					%CommandString = sprintf('LD_LIBRARY_PATH=/usr/local/mrtrix-0.2.9/lib; streamtrack DT_STREAM %s %s -quiet -seed %s -exclude %s -include %s -mask %s -number %d -maxnum %d -step 1 -grad %s -curvature 4 -stop 2>/dev/null;', ...
@@ -200,26 +212,32 @@ while(NumTracksSoFar < TotalNumTracks)
 						fullfile(MrtrixSubjDir, Subject, 'mask.nii.gz'), NumTracks, NumTracks * 100, ...
 						MrtrixStep, ...
 						10);
+						
 					if(Curvature > 0)
 						CommandString = [CommandString ' -curvature ' num2str(Curvature)];
 					end
 					CommandString = [CommandString ' > ' LogFile];
+					%if ReturnStreamtrackCommand
+					%	varargout{1} = CommandString;
+					%	return;
+					%end
 					%keyboard;
 			end
 			
-			disp(CommandString);
-			%keyboard;
-			disp('Generating tracks');
-			system(CommandString);
-			clear CommandString;
-			disp('Finished generating tracks');
-
 			
+			%keyboard;
+			if exist(TrackFile, 'file') ~= 2
+				%disp(CommandString);
+				disp('Generating tracks');
+				system(CommandString);
+				clear CommandString;
+				disp('Finished generating tracks');
+			end
 			%TrackFile = 'tmp.tck';
 			%LogFile = 'tmp.log';
 			MIFTracks = load_mif_tracks(TrackFile);
 			%copyfile(TrackFile, fullfile(MrtrixSubjDir, Subject, 'tmp.tck'));
-			delete(TrackFile);
+			%delete(TrackFile);
 			CurTracks = MIFTracks.Tracks;
 			if(isempty(TracksHeader))
 				TracksHeader = MIFTracks;
@@ -231,7 +249,7 @@ while(NumTracksSoFar < TotalNumTracks)
 			%tokens = textscan(FID, '%s %f %f %f %d %d %d %d %d');
 			tokens = textscan(FID, '%d %d %f %f %f', 'CollectOutput', true);
 			fclose(FID);
-			delete(LogFile);
+			%delete(LogFile);
 			clear LogFile;
 			%keyboard;
 			for z = 1:length(tokens)
@@ -618,18 +636,22 @@ EmptyTracksHeader = TracksHeader;
 %TracksHeader
 TracksHeader.Tracks = FinalTracks;
 TracksHeader.count = length(TracksHeader.Tracks);
-F = fullfile(MrtrixSubjDir, Subject, ['tracks_' SeedType '_' MrtrixMethod '_accepted_tracks_' num2str(Curvature)]);
+if isempty(TrialNumber)
+	F = fullfile(MrtrixSubjDir, Subject, ['tracks_' SeedType '_' MrtrixMethod '_accepted_tracks_' num2str(Curvature)]);
+else
+	F = fullfile(MrtrixSubjDir, Subject, ['tracks_' SeedType '_' MrtrixMethod '_accepted_tracks_' num2str(Curvature) '_' num2str(TrialNumber)]);
+end
 save_mif_tracks(TracksHeader, [F '.tck']);
 
-clear TracksHeader;
-[~,~,~] = mkdir(fullfile(MrtrixSubjDir, Subject, ['tracks_' SeedType '_' MrtrixMethod '_accepted_tracks_' num2str(Curvature) '_rois']));
-for I = 1:length(CurLabels.shortlabels)
-	T = EmptyTracksHeader;
-	T.Tracks = FinalTracks((FinalStartRegions == I) | (FinalEndRegions == I));
-	F = fullfile(MrtrixSubjDir, Subject, ['tracks_' SeedType '_' MrtrixMethod '_accepted_tracks_' num2str(Curvature) '_rois'], [CurLabels.shortlabels{I} '.tck']);
-	save_mif_tracks(T, F);
-	clear T F;
-end
+% clear TracksHeader;
+% [~,~,~] = mkdir(fullfile(MrtrixSubjDir, Subject, ['tracks_' SeedType '_' MrtrixMethod '_accepted_tracks_' num2str(Curvature) '_rois']));
+% for I = 1:length(CurLabels.shortlabels)
+% 	T = EmptyTracksHeader;
+% 	T.Tracks = FinalTracks((FinalStartRegions == I) | (FinalEndRegions == I));
+% 	F = fullfile(MrtrixSubjDir, Subject, ['tracks_' SeedType '_' MrtrixMethod '_accepted_tracks_' num2str(Curvature) '_rois'], [CurLabels.shortlabels{I} '.tck']);
+% 	save_mif_tracks(T, F);
+% 	clear T F;
+% end
 
 % TracksHeader = EmptyTracksHeader;
 % TracksHeader.Tracks = FinalTracksWorld;
@@ -673,8 +695,12 @@ T = CountA;
 T(T == 0) = 1;
 LengthA = LengthA ./ T;
 clear T;
-
-save(fullfile(MrtrixSubjDir, Subject, ['connectivity_' SeedType '_' MrtrixMethod '_curvature_' num2str(Curvature) '.mat']), ...
+if isempty(TrialNumber)
+	F = fullfile(MrtrixSubjDir, Subject, ['connectivity_' SeedType '_' MrtrixMethod '_curvature_' num2str(Curvature) '.mat']);
+else
+	F = fullfile(MrtrixSubjDir, Subject, ['connectivity_' SeedType '_' MrtrixMethod '_curvature_' num2str(Curvature) '_' num2str(TrialNumber) '.mat']);
+end
+save(F, ...
 	'FinalStartRegions', 'FinalEndRegions', ...
 	'SeedVolumes', 'SeedSurfaceAreas', ...
 	'CountA', 'LengthA', ...

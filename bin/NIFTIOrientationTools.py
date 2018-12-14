@@ -30,6 +30,11 @@ def applyOrntToNIIAffine(NII, ornt_transform):
 			transformAffine[curDim, 3] = (NII.shape[newDim] - 1) * NII.header.get_zooms()[newDim]
 
 	pixDimsVector = numpy.concatenate((numpy.array(NII.header.get_zooms()), [1]))
-
-	return numpy.matrix(NIIAffine) * numpy.diag(1.0 / pixDimsVector) * numpy.matrix(transformAffine) * numpy.diag(pixDimsVector)
-	
+	pixDimsVector = numpy.concatenate((pixDimsVector[0:3], numpy.array([1])))
+	try:
+		T = numpy.matrix(NIIAffine) * numpy.diag(1.0 / pixDimsVector) * numpy.matrix(transformAffine) * numpy.diag(pixDimsVector)
+	except Exception:
+		print NIIAffine
+		print pixDimsVector
+		print transformAffine
+	return T

@@ -9,16 +9,10 @@ else
 	SUBJECTID=$1
 	DISTMETHOD=$2
 
-	if [ "x`imglob $DWIREORIENT/$SUBJECTID`" = "x" ]
-	then
-		echo "The reoriented DWI image $DWIREORIENT/${SUBJECTID} does not exist, run --dwi-reorient"
-		exit 1;
-	fi
-	
 	case $DISTMETHOD in 
 	--eddycorrect)
 		mkdir -p $DWIEDDYCORRECTED
-		DWIEddyCorrectMI -m $DWIEDDYCORRECTED/${SUBJECTID}.mat $DWIREORIENT/${SUBJECTID}.nii.gz $DWIEDDYCORRECTED/${SUBJECTID}.nii.gz 0 
+		DWIEddyCorrectMI -m $DWIEDDYCORRECTED/${SUBJECTID}.mat $RAWDWI/${SUBJECTID}.nii.gz $DWIEDDYCORRECTED/${SUBJECTID}.nii.gz 0 
 		;;
 	--blipud)
 		echo "blipud"
